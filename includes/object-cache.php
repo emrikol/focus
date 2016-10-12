@@ -23,6 +23,13 @@ if ( ! defined( 'WP_CACHE_KEY_SALT' ) ) {
 }
 
 /**
+ * Defines the max expiry age for FOCUS objects.
+ */
+if ( ! defined( 'WP_FOCUS_MAXTTL' ) ) {
+	define( 'WP_FOCUS_MAXTTL', YEAR_IN_SECONDS );
+}
+
+/**
  * From WordPress Core: Adds data to the cache, if the cache key doesn't already exist.
  *
  * @since 0.1.0
@@ -347,7 +354,7 @@ class WP_Object_Cache {
 	 * @access private
 	 * @var int
 	 */
-	public $default_expiration = YEAR_IN_SECONDS;
+	public $default_expiration = WP_FOCUS_MAXTTL;
 
 	/**
 	 * Cache file header.

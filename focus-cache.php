@@ -67,7 +67,7 @@ class FOCUS_Cache {
 
 		add_action( is_multisite() ? 'network_admin_menu' : 'admin_menu', array( $this, 'add_admin_menu_page' ) );
 		add_action( 'admin_notices', array( $this, 'show_admin_notices' ) );
-		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_styles' ) );
+		add_action( 'network_admin_notices', array( $this, 'show_admin_notices' ) );
 		add_action( 'load-' . $this->screen, array( $this, 'do_admin_actions' ) );
 		add_action( 'load-' . $this->screen, array( $this, 'add_admin_page_notices' ) );
 
@@ -96,6 +96,26 @@ class FOCUS_Cache {
 	}
 
 	/**
+	 * Returns the cache key prefix, if it exists
+	 *
+	 * @since 0.1.0
+	 * @access public
+	 */
+	public function get_focus_maxttl() {
+		return defined( 'WP_FOCUS_MAXTTL' ) ? WP_FOCUS_MAXTTL : null;
+	}
+
+	/**
+	 * Returns the cache key prefix, if it exists
+	 *
+	 * @since 0.1.0
+	 * @access public
+	 */
+	public function get_focus_cachekey_prefix() {
+		return defined( 'WP_CACHE_KEY_SALT' ) ? WP_CACHE_KEY_SALT : null;
+	}
+
+	/**
 	 * Actually does the heavy lifting to render the admin page.
 	 *
 	 * @since 0.1.0
@@ -118,7 +138,7 @@ class FOCUS_Cache {
 		}
 
 		// show admin page.
-		require_once plugin_dir_path( __FILE__ ) . '/includes/admin-page.php';
+		require_once( plugin_dir_path( __FILE__ ) . 'includes/admin-page.php' );
 	}
 
 	/**
@@ -136,21 +156,6 @@ class FOCUS_Cache {
 			array( sprintf( '<a href="%s">Settings</a>', esc_url( network_admin_url( $this->page ) ) ) ),
 			$links
 		);
-	}
-
-	/**
-	 * Enqueues CSS for UI
-	 *
-	 * @since 0.1.0
-	 * @access public
-	 *
-	 * @param string $hook_suffix The screen that the CSS should be displayed on.
-	 */
-	public function enqueue_admin_styles( $hook_suffix ) {
-		if ( $hook_suffix === $this->screen ) {
-			$plugin = get_plugin_data( __FILE__ );
-			wp_enqueue_style( 'focus-cache', plugin_dir_url( __FILE__ ) . 'includes/admin-page.css', null, $plugin['Version'] );
-		}
 	}
 
 	/**
@@ -189,12 +194,12 @@ class FOCUS_Cache {
 	}
 
 	/**
-	 * Returns the status of the object cache.
+	 * Returns the status of the object cache dropin.
 	 *
 	 * @since 0.1.0
 	 * @access public
 	 *
-	 * @return string Status of the object cache.
+	 * @return string Status of the object cache dropin.
 	 */
 	public function get_status() {
 		if ( ! $this->object_cache_dropin_exists() ) {
@@ -202,7 +207,7 @@ class FOCUS_Cache {
 		}
 
 		if ( $this->validate_object_cache_dropin() ) {
-			return esc_html__( 'Connected', 'focus-cache' );
+			return esc_html__( 'Enabled', 'focus-cache' );
 		}
 
 		return esc_html__( 'Unknown', 'focus-cache' );
@@ -228,10 +233,10 @@ class FOCUS_Cache {
 				$plugin = get_plugin_data( plugin_dir_path( __FILE__ ) . '/includes/object-cache.php' );
 
 				if ( version_compare( $dropin['Version'], $plugin['Version'], '<' ) ) {
-					$message = sprintf( esc_html__( 'The FOCUS cache drop-in is outdated. Please <a href="%s">update it now</a>.', 'focus-cache' ), esc_url( $url ) );
+					$message = sprintf( __( 'The FOCUS cache drop-in is outdated. Please <a href="%s">update it now</a>.', 'focus-cache' ), esc_url( $url ) );
 				}
 			} else {
-				$message = sprintf( esc_html__( 'Another object cache drop-in was found. To use FOCUS Cache, <a href="%s">please replace it now</a>.', 'focus-cache' ), esc_url( $url ) );
+				$message = sprintf( __( 'Another object cache drop-in was found. To use FOCUS Cache, <a href="%s">please replace it now</a>.', 'focus-cache' ), esc_url( $url ) );
 			}
 
 			if ( isset( $message ) ) {
@@ -328,7 +333,7 @@ class FOCUS_Cache {
 					exit;
 				}
 			}
-		}
+		} // End if().
 	}
 
 	/**
