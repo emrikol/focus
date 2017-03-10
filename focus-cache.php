@@ -122,13 +122,15 @@ class FOCUS_Cache {
 	 * @access public
 	 */
 	public function render_admin_page() {
-		$nonce = isset( $_GET['_wpnonce'] ) ? sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ) : false; // Input var okay.
-		$action = isset( $_GET['action'] ) ? sanitize_text_field( wp_unslash( $_GET['action'] ) ) : false; // Input var okay.
+		if ( ! isset( $_GET['_wpnonce'], $_GET['action'] ) ) { // Input var okay.
+			return;
+		}
+
+		$action = in_array( $_GET['action'], $this->actions, true ) ? sanitize_key( $_GET['action'] ) : false; // Input var okay.
+		$nonce = $_GET['_wpnonce']; // Input var okay.
 
 		// request filesystem credentials?
-		if ( isset( $nonce, $action ) ) {
-			$action = sanitize_text_field( wp_unslash( $action ) );
-
+		if ( false !== $action ) {
 			if ( in_array( $action, $this->actions, true ) && wp_verify_nonce( $nonce, $action ) ) {
 				$url = esc_url_raw( wp_nonce_url( network_admin_url( add_query_arg( 'action', $action, $this->page ) ), $action ) );
 				if ( false === $this->initialize_filesystem( $url ) ) {
@@ -292,8 +294,8 @@ class FOCUS_Cache {
 	 */
 	public function do_admin_actions() {
 		if ( isset( $_GET['_wpnonce'], $_GET['action'] ) ) { // Input var okay.
-			$action = sanitize_text_field( wp_unslash( $_GET['action'] ) ); // Input var okay.
-			$nonce = sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ); // Input var okay.
+			$action = in_array( $_GET['action'], $this->actions, true ) ? sanitize_key( $_GET['action'] ) : false; // Input var okay.
+			$nonce = $_GET['_wpnonce']; // Input var okay.
 
 			// Verify nonce.
 			if ( ! wp_verify_nonce( $nonce, $action ) ) {
