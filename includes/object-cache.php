@@ -1072,7 +1072,7 @@ class WP_Object_Cache {
 	 * @param string $dir Directory to delete.
 	 */
 	protected function _rm_cache_dir( $dir ) {
-		$dir_object = opendir( $dir );
+		$dir_object = @opendir( $dir ); // @codingStandardsIgnoreLine
 
 		if ( false === $dir_object ) {
 			return false;
