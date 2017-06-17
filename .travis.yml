@@ -30,8 +30,7 @@ matrix:
     - php: 7.0
       env: WP_VERSION=latest
     - php: 5.6
-      env: WP_VERSION=latest
-      env: SNIFF=1
+      env: WP_VERSION=latest SNIFF=1
     - php: 5.3
       env: WP_VERSION=latest
 
