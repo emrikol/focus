@@ -51,6 +51,21 @@ function wp_cache_add( $key, $data, $group = 'default', $expire = 0 ) {
 }
 
 /**
+ * From WordPress Core: Adds a group or set of groups to the list of global groups.
+ *
+ * @since 0.1.0
+ *
+ * @see WP_Object_Cache::add_global_groups()
+ * @global WP_Object_Cache $wp_object_cache Object cache global instance.
+ *
+ * @param string|array $groups A group or an array of groups to add.
+ */
+function wp_cache_add_global_groups( $groups ) {
+	global $wp_object_cache;
+	$wp_object_cache->add_global_groups( $groups );
+}
+
+/**
  * From WordPress Core: Closes the cache.
  *
  * This function has ceased to do anything since WordPress 2.5. The
@@ -103,6 +118,22 @@ function wp_cache_delete( $key, $group = 'default' ) {
 }
 
 /**
+ * Removes cache contents for a given group.
+ * 
+ * @since 0.1.0
+ * 
+ * @uses $wp_object_cache Object Cache Class
+ * @see WP_Object_Cache::delete_group()
+ *
+ * @param string $group Where the cache contents are grouped
+ * @return bool True on successful removal, false on failure
+ */
+function wp_cache_delete_group( $group ) {
+	global $wp_object_cache;
+	return $wp_object_cache->delete_group( $group );
+}
+
+/**
  * From WordPress Core: Removes all cache items.
  *
  * @since 0.1.0
@@ -125,13 +156,15 @@ function wp_cache_flush() {
  * @see WP_Object_Cache::get()
  * @global WP_Object_Cache $wp_object_cache Object cache global instance.
  *
- * @param int|string $key The key under which the cache contents are stored.
- * @param string     $group Optional. Where the cache contents are grouped. Default empty.
+ * @param int|string $key What the contents in the cache are called
+ * @param string $group Where the cache contents are grouped
+ * @param bool $force Whether to force an update of the local cache from the persistent cache (default is false)
+ * @param &bool $found Whether key was found in the cache. Disambiguates a return of false, a storable value.
  * @return bool|mixed False on failure to retrieve contents or the cache contents on success
  */
-function wp_cache_get( $key, $group = 'default' ) {
+function wp_cache_get( $key, $group = 'default', $force = false, &$found = null ) {
 	global $wp_object_cache;
-	return $wp_object_cache->get( $key, $group );
+	return $wp_object_cache->get( $key, $group, $force, $found );
 }
 
 /**
@@ -226,21 +259,6 @@ function wp_cache_switch_to_blog( $blog_id ) {
 }
 
 /**
- * From WordPress Core: Adds a group or set of groups to the list of global groups.
- *
- * @since 0.1.0
- *
- * @see WP_Object_Cache::add_global_groups()
- * @global WP_Object_Cache $wp_object_cache Object cache global instance.
- *
- * @param string|array $groups A group or an array of groups to add.
- */
-function wp_cache_add_global_groups( $groups ) {
-	global $wp_object_cache;
-	return $wp_object_cache->add_global_groups( $groups );
-}
-
-/**
  * From WordPress Core: Adds a group or set of groups to the list of non-persistent groups.
  *
  * @since 0.1.0
@@ -270,10 +288,10 @@ class WP_Object_Cache {
 	 * The amount of times the cache data was already stored in the cache.
 	 *
 	 * @since 0.1.0
-	 * @access private
+	 * @access public
 	 * @var int
 	 */
-	private $cache_hits = 0;
+	public $cache_hits = 0;
 
 	/**
 	 * Amount of times the cache did not have the request in cache.
@@ -291,7 +309,7 @@ class WP_Object_Cache {
 	 * @access private
 	 * @var int
 	 */
-	private $group_ops = array();
+	var $group_ops = array();
 
 	/**
 	 * Holds the cached objects.
@@ -300,7 +318,7 @@ class WP_Object_Cache {
 	 * @access private
 	 * @var array
 	 */
-	private $cache = array();
+	var $cache = array();
 
 	/**
 	 * List of global cache groups.
@@ -309,7 +327,7 @@ class WP_Object_Cache {
 	 * @access protected
 	 * @var array
 	 */
-	protected $global_groups = array();
+	var $global_groups = array();
 
 	/**
 	 * Groups that should not be stored in persistent cache.
@@ -318,7 +336,7 @@ class WP_Object_Cache {
 	 * @access private
 	 * @var array
 	 */
-	private $non_persistent_groups = array( 'comment' );
+	var $non_persistent_groups = array( 'comment' );
 
 	/**
 	 * The blog prefix to prepend to keys in non-global groups.
@@ -327,7 +345,7 @@ class WP_Object_Cache {
 	 * @access private
 	 * @var int
 	 */
-	private $blog_prefix;
+	var $blog_prefix;
 
 	/**
 	 * Directory where cache files are stored.
@@ -336,7 +354,7 @@ class WP_Object_Cache {
 	 * @access private
 	 * @var string
 	 */
-	private $cache_dir;
+	var $cache_dir;
 
 	/**
 	 * Secret to use for a hash salt.
@@ -345,7 +363,7 @@ class WP_Object_Cache {
 	 * @access private
 	 * @var string
 	 */
-	private $secret = '';
+	var $secret = '';
 
 	/**
 	 * Default maximum cache expiry.
@@ -363,7 +381,7 @@ class WP_Object_Cache {
 	 * @access private
 	 * @var string
 	 */
-	private $cache_serial_header = '<?php /*';
+	var $cache_serial_header = '<?php /*';
 
 	/**
 	 * Cache file footer.
@@ -372,7 +390,7 @@ class WP_Object_Cache {
 	 * @access private
 	 * @var string
 	 */
-	private $cache_serial_footer = '*/ ?>';
+	var $cache_serial_footer = '*/ ?>';
 
 	/**
 	 * Sets up object properties.
@@ -420,8 +438,8 @@ class WP_Object_Cache {
 	 * @since 0.1.0
 	 * @access public
 	 *
-	 * @uses WP_Object_Cache::_exists() Checks to see if the cache already has data.
-	 * @uses WP_Object_Cache::set()     Sets the data after the checking the cache contents existence.
+	 * @uses WP_Object_Cache::_isset_internal() Checks to see if the cache already has data.
+	 * @uses WP_Object_Cache::set()             Sets the data after the checking the cache contents existence.
 	 *
 	 * @param int|string $key    What to call the contents in the cache.
 	 * @param mixed      $data   The contents to store in the cache.
@@ -437,11 +455,12 @@ class WP_Object_Cache {
 		$group = $this->_sanitize_cache_group( $group );
 		$key = $this->_key( $key, $group );
 
-		if ( $this->_exists( $key, $group ) ) {
+		if ( $this->_isset_internal( $key, $group ) ) {
 			return false;
 		}
 
-		if ( false !== $this->get( $key, $group ) ) {
+		$force = null;
+		if ( false !== $this->get( $key, $group, false, $force, false ) ) {
 			return false;
 		}
 
@@ -460,6 +479,7 @@ class WP_Object_Cache {
 		$groups = (array) $groups;
 
 		// Add and dedupe groups.
+		$groups = array_fill_keys( $groups, true );
 		$this->global_groups = array_merge( $this->global_groups, $groups );
 		$this->global_groups = array_unique( $this->global_groups );
 	}
@@ -476,6 +496,7 @@ class WP_Object_Cache {
 		$groups = (array) $groups;
 
 		// Add and dedupe groups.
+		$groups = array_fill_keys( $groups, true );
 		$this->non_persistent_groups = array_merge( $this->non_persistent_groups, $groups );
 		$this->non_persistent_groups = array_unique( $this->non_persistent_groups );
 	}
@@ -496,7 +517,7 @@ class WP_Object_Cache {
 		$key = $this->_key( $key, $group );
 
 		// Key/Group doesn't exist, return false.
-		if ( ! $this->_exists( $key, $group ) ) {
+		if ( ! $this->_isset_internal( $key, $group ) ) {
 			return false;
 		}
 
@@ -537,7 +558,7 @@ class WP_Object_Cache {
 		$return = true;
 
 		// Key/Group doesn't exist, return false.
-		if ( ! $this->_exists( $key, $group ) ) {
+		if ( ! $this->_isset_internal( $key, $group ) ) {
 			$return = false;
 		}
 
@@ -553,6 +574,41 @@ class WP_Object_Cache {
 		$this->group_ops[ $group ][] = 'Delete ' . $key;
 
 		return $return;
+	}
+
+	/**
+	 * Remove the contents of all cache keys in the group.
+	 *
+	 * @since 0.1.0
+	 * @access public
+	 *
+	 * @param int|string $key        What the contents in the cache are called.
+	 * @param string     $group      Optional. Where the cache contents are grouped. Default 'default'.
+	 * @return bool False if the contents weren't deleted and true on success.
+	 */
+	public function delete_group( $group = false ) {
+		if ( false === $group ) {
+			return false;
+		}
+
+		if ( ! $this->_should_persist( $group ) && ! isset( $this->cache[ $group ] ) ) {
+			return false;
+		}
+
+		// Delete local cache group.
+		unset( $this->cache[ $group ] );
+
+		// Mark all files as expired, just in case delete times out.
+		foreach ( glob( $this->cache_dir . $group . '/*.*') as $filename ) {
+			if ( is_file( $filename ) ) {
+				touch( $filename, time() - 3600 );
+			}
+		}
+
+		// Delet the cache group dir.
+		$this->_rm_cache_dir( $this->cache_dir . $group );
+
+		return true;
 	}
 
 	/**
@@ -582,20 +638,25 @@ class WP_Object_Cache {
 	 * @since 0.1.0
 	 * @access public
 	 *
-	 * @param int|string $key    What the contents in the cache are called.
-	 * @param string     $group  Optional. Where the cache contents are grouped. Default 'default'.
-	 * @return false|mixed False on failure to retrieve contents or the cache contents on success.
+	 * @param int|string $key What the contents in the cache are called
+	 * @param string $group Where the cache contents are grouped
+	 * @param string $force Whether to force a refetch rather than relying on the local cache (default is false)
+	 * @param bool $found Optional. Whether the key was found in the cache. Disambiguates a return of false, a storable value. Passed by reference. Default null.
+	 * @return bool|mixed False on failure to retrieve contents or the cache contents on success
 	 */
-	public function get( $key, $group = 'default' ) {
+	public function get( $key, $group = 'default', $force = false, &$found = null, $stat = true ) {
 		$group = $this->_sanitize_cache_group( $group );
 		$key = $this->_key( $key, $group );
 
 		// Memory cache exists, please grab.
-		if ( $this->_exists( $key, $group ) ) {
+		if ( $this->_isset_internal( $key, $group ) && ! $force ) {
 			// Stats.
-			$this->group_ops[ $group ][] = 'Hit (Mem): ' . $key;
-			$this->cache_hits++;
+			if ( $stat ) {
+				$this->group_ops[ $group ][] = 'Hit (Mem): ' . $key;
+				$this->cache_hits++;
+			}
 
+			$found = true;
 			return $this->cache[ $group ][ $key ];
 		}
 
@@ -606,27 +667,37 @@ class WP_Object_Cache {
 				$this->delete( $key, $group );
 
 				// Stats.
-				$this->group_ops[ $group ][] = 'Miss (Expired): ' . $key;
-				$this->cache_misses++;
+				if ( $stat ) {
+					$this->group_ops[ $group ][] = 'Miss (Expired): ' . $key;
+					$this->cache_misses++;
+				}
 
+				$found = false;
 				return false;
 			}
 
 			$this->cache[ $group ][ $key ] = maybe_unserialize( base64_decode( substr( file_get_contents( $this->_get_focus_file( $key, $group ) ), strlen( $this->cache_serial_header ), - strlen( $this->cache_serial_footer ) ) ) ); // @codingStandardsIgnoreLine
 
 			// Stats.
-			$this->group_ops[ $group ][] = 'Hit (FOCUS): ' . $key;
-			$this->cache_hits++;
+			if ( $stat ) {
+				$this->group_ops[ $group ][] = 'Hit (FOCUS): ' . $key;
+				$this->cache_hits++;
+			}
 
 			if ( is_object( $this->cache[ $group ][ $key ] ) ) {
+				$found = true;
 				return clone $this->cache[ $group ][ $key ];
 			}
 
+			$found = true;
 			return $this->cache[ $group ][ $key ];
 		}
 
-		$this->group_ops[ $group ][] = 'Miss (Empty): ' . $key;
-		$this->cache_misses++;
+		if ( $stat ) {
+			$this->group_ops[ $group ][] = 'Miss (Empty): ' . $key;
+			$this->cache_misses++;
+		}
+		$found = false;
 		return false;
 	}
 
@@ -646,7 +717,7 @@ class WP_Object_Cache {
 		$key = $this->_key( $key, $group );
 
 		// Key/Group doesn't exist, return false.
-		if ( ! $this->_exists( $key, $group ) ) {
+		if ( ! $this->_isset_internal( $key, $group ) ) {
 			return false;
 		}
 
@@ -658,6 +729,11 @@ class WP_Object_Cache {
 
 		// Increment value.
 		$this->cache[ $group ][ $key ] += $offset;
+
+		// Never go below 0.
+		If ( $this->cache[ $group ][ $key ] < 0 ) {
+			$this->cache[ $group ][ $key ] = 0;
+		}
 
 		// Save new value to the cache.
 		$current_expiry = $this->_get_expiration( $key, $group );
@@ -686,7 +762,7 @@ class WP_Object_Cache {
 		$key = $this->_key( $key, $group );
 
 		// Key/Group doesn't exist, return false.
-		if ( ! $this->_exists( $key, $group ) ) {
+		if ( ! $this->_isset_internal( $key, $group ) ) {
 			return false;
 		}
 
@@ -780,7 +856,7 @@ class WP_Object_Cache {
 	 * @param int $blog_id Blog ID.
 	 */
 	public function switch_to_blog( $blog_id = false ) { // @codingStandardsIgnoreLine
-		if ( false === $blog_id || (int) $blog_id < 1 ) {
+		if ( false === $blog_id || (int) $blog_id < 1 || ! is_multisite() ) {
 			return false;
 		}
 
@@ -814,6 +890,18 @@ class WP_Object_Cache {
 	}
 
 	/**
+	 * Does this group use persistent storage?
+	 * 
+	 * @since 0.1.0
+	 * 
+	 * @param string $group Cache group.
+	 * @return bool        true if the group is persistent, false if not.
+	 */
+	protected function _should_persist( $group ) {
+		return empty( $this->non_persistent_groups[ $group ] );
+	}
+
+	/**
 	 * Serves as a utility function to determine whether a key exists in the cache.
 	 *
 	 * @since 0.1.0
@@ -823,7 +911,7 @@ class WP_Object_Cache {
 	 * @param string     $group Cache group for the key existence check.
 	 * @return bool Whether the key exists in the cache for the given group.
 	 */
-	protected function _exists( $key, $group ) {
+	protected function _isset_internal( $key, $group ) {
 		return isset( $this->cache[ $group ] ) && ( isset( $this->cache[ $group ][ $key ] ) || array_key_exists( $key, $this->cache[ $group ] ) );
 	}
 
@@ -877,18 +965,18 @@ class WP_Object_Cache {
 	 * Normalizes key
 	 *
 	 * @since 0.1.0
-	 * @access protected
+	 * @access public
 	 *
 	 * @param int|string $key   Cache key to check.
 	 * @param string     $group Cache group for the key check.
 	 * @return string Normalized copy of key.
 	 */
-	protected function _key( $key, $group ) {
+	public function _key( $key, $group ) {
 		$group = $this->_sanitize_cache_group( $group );
 
 		$prefix = $this->key_salt;
 
-		if ( isset( $this->global_groups[ $group ] ) ) {
+		if ( ! empty( $this->global_groups[ $group ] ) ) {
 			$prefix .= $this->global_prefix;
 		} else {
 			$prefix .= $this->blog_prefix;
@@ -984,7 +1072,7 @@ class WP_Object_Cache {
 	 * @param string $dir Directory to delete.
 	 */
 	protected function _rm_cache_dir( $dir ) {
-		$dir_object = opendir( $dir );
+		$dir_object = @opendir( $dir );
 
 		if ( false === $dir_object ) {
 			return false;
@@ -1012,12 +1100,12 @@ class WP_Object_Cache {
 	 * Serves as a utility function to create multisite cache group names.
 	 *
 	 * @since 0.1.0
-	 * @access protected
+	 * @access public
 	 *
 	 * @param int $group Cache group to sanitize.
 	 * @return string Sanitized cache group.
 	 */
-	protected function _sanitize_cache_group( $group ) {
+	public function _sanitize_cache_group( $group ) {
 		if ( empty( $group ) ) {
 			$group = 'default';
 		}
@@ -1052,21 +1140,40 @@ class WP_Object_Cache {
 		$group_dir = $this->_make_group_dir( $group, $dir_perms );
 		$cache_file = $this->_get_focus_file( $key, $group );
 		$temp_file = tempnam( $cache_dir, 'tmp' ); // @codingStandardsIgnoreLine
+		if ( false === $temp_file ) {
+			return false;
+		}
 
 		// Serialize, Base64 Encode, and add Header/Footer.
-		$serial = $this->cache_serial_header . base64_encode( maybe_serialize( $this->cache[ $group ][ $key ] ) ) . $this->cache_serial_footer;
+		$serial = $this->cache_serial_header . base64_encode( serialize( $data ) ) . $this->cache_serial_footer;
 
 		$fd = fopen( $temp_file, 'w' );
+		if ( false === $fd ) {
+			return false;
+		}
 
-		fputs( $fd, $serial ); // @codingStandardsIgnoreLine
+		$fwrite = fwrite( $fd, $serial ); // @codingStandardsIgnoreLine
+		if ( false === $fwrite ) {
+			return false;
+		}
+
 		fclose( $fd );
 
 		if ( ! rename( $temp_file, $cache_file ) ) { // @codingStandardsIgnoreLine
 			unlink( $temp_file ); // @codingStandardsIgnoreLine
+			return false;
 		}
-		chmod( $cache_file, $file_perms ); // @codingStandardsIgnoreLine
+
+		$chmod = chmod( $cache_file, $file_perms ); // @codingStandardsIgnoreLine
+		if ( false === $chmod ) {
+			return false;
+		}
 
 		// Set expiry.
-		touch( $cache_file, time() + $expire ); // @codingStandardsIgnoreLine
+		$touch = touch( $cache_file, time() + $expire ); // @codingStandardsIgnoreLine
+		if ( false === $touch ) {
+			return false;
+		}
+		return true;
 	}
 }
