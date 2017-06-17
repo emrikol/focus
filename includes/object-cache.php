@@ -119,13 +119,13 @@ function wp_cache_delete( $key, $group = 'default' ) {
 
 /**
  * Removes cache contents for a given group.
- * 
+ *
  * @since 0.1.0
- * 
+ *
  * @uses $wp_object_cache Object Cache Class
  * @see WP_Object_Cache::delete_group()
  *
- * @param string $group Where the cache contents are grouped
+ * @param string $group Where the cache contents are grouped.
  * @return bool True on successful removal, false on failure
  */
 function wp_cache_delete_group( $group ) {
@@ -156,10 +156,10 @@ function wp_cache_flush() {
  * @see WP_Object_Cache::get()
  * @global WP_Object_Cache $wp_object_cache Object cache global instance.
  *
- * @param int|string $key What the contents in the cache are called
- * @param string $group Where the cache contents are grouped
- * @param bool $force Whether to force an update of the local cache from the persistent cache (default is false)
- * @param &bool $found Whether key was found in the cache. Disambiguates a return of false, a storable value.
+ * @param int|string $key What the contents in the cache are called.
+ * @param string     $group Where the cache contents are grouped.
+ * @param bool       $force Whether to force an update of the local cache from the persistent cache (default is false).
+ * @param bool       $found Whether key was found in the cache. Disambiguates a return of false, a storable value.
  * @return bool|mixed False on failure to retrieve contents or the cache contents on success
  */
 function wp_cache_get( $key, $group = 'default', $force = false, &$found = null ) {
@@ -582,9 +582,8 @@ class WP_Object_Cache {
 	 * @since 0.1.0
 	 * @access public
 	 *
-	 * @param int|string $key        What the contents in the cache are called.
-	 * @param string     $group      Optional. Where the cache contents are grouped. Default 'default'.
-	 * @return bool False if the contents weren't deleted and true on success.
+	 * @param string $group Optional. Where the cache contents are grouped. Default 'default'.
+	 * @return bool False if not deleted and true on success.
 	 */
 	public function delete_group( $group = false ) {
 		if ( false === $group ) {
@@ -599,9 +598,9 @@ class WP_Object_Cache {
 		unset( $this->cache[ $group ] );
 
 		// Mark all files as expired, just in case delete times out.
-		foreach ( glob( $this->cache_dir . $group . '/*.*') as $filename ) {
+		foreach ( glob( $this->cache_dir . $group . '/*.*' ) as $filename ) {
 			if ( is_file( $filename ) ) {
-				touch( $filename, time() - 3600 );
+				touch( $filename, time() - 3600 ); // @codingStandardsIgnoreLine
 			}
 		}
 
@@ -638,10 +637,11 @@ class WP_Object_Cache {
 	 * @since 0.1.0
 	 * @access public
 	 *
-	 * @param int|string $key What the contents in the cache are called
-	 * @param string $group Where the cache contents are grouped
-	 * @param string $force Whether to force a refetch rather than relying on the local cache (default is false)
-	 * @param bool $found Optional. Whether the key was found in the cache. Disambiguates a return of false, a storable value. Passed by reference. Default null.
+	 * @param int|string $key What the contents in the cache are called.
+	 * @param string     $group Where the cache contents are grouped.
+	 * @param string     $force Whether to force a refetch rather than relying on the local cache (default is false).
+	 * @param bool       $found Optional. Whether the key was found in the cache. Disambiguates a return of false, a storable value. Passed by reference. Default null.
+	 * @param bool       $stat  Optional. Whether or not to record stats.  Default true.
 	 * @return bool|mixed False on failure to retrieve contents or the cache contents on success
 	 */
 	public function get( $key, $group = 'default', $force = false, &$found = null, $stat = true ) {
@@ -731,7 +731,7 @@ class WP_Object_Cache {
 		$this->cache[ $group ][ $key ] += $offset;
 
 		// Never go below 0.
-		If ( $this->cache[ $group ][ $key ] < 0 ) {
+		if ( $this->cache[ $group ][ $key ] < 0 ) {
 			$this->cache[ $group ][ $key ] = 0;
 		}
 
@@ -891,9 +891,9 @@ class WP_Object_Cache {
 
 	/**
 	 * Does this group use persistent storage?
-	 * 
+	 *
 	 * @since 0.1.0
-	 * 
+	 *
 	 * @param string $group Cache group.
 	 * @return bool        true if the group is persistent, false if not.
 	 */
@@ -1072,7 +1072,7 @@ class WP_Object_Cache {
 	 * @param string $dir Directory to delete.
 	 */
 	protected function _rm_cache_dir( $dir ) {
-		$dir_object = @opendir( $dir );
+		$dir_object = opendir( $dir );
 
 		if ( false === $dir_object ) {
 			return false;
@@ -1145,7 +1145,8 @@ class WP_Object_Cache {
 		}
 
 		// Serialize, Base64 Encode, and add Header/Footer.
-		$serial = $this->cache_serial_header . base64_encode( serialize( $data ) ) . $this->cache_serial_footer;
+		// `maybe_serialize()` causes issues with variable typing, can't use.
+		$serial = $this->cache_serial_header . base64_encode( serialize( $data ) ) . $this->cache_serial_footer; // @codingStandardsIgnoreLine
 
 		$fd = fopen( $temp_file, 'w' );
 		if ( false === $fd ) {

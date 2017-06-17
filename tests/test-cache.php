@@ -1,5 +1,5 @@
 <?php
-
+// @codingStandardsIgnoreFile.
 /**
  * Test the persistent object cache using core's cache tests
  * Borrowed from https://github.com/pantheon-systems/wp-redis/blob/e1027dc56b9e2e08541bcd63dcf785cd11d1a2d2/tests/phpunit/test-cache.php
@@ -590,7 +590,6 @@ class CacheTest extends WP_UnitTestCase {
 		// wp_cache_delete() does not have a $force method.
 		// Delete returns (bool) true when key is not set and $force is true
 		// $this->assertTrue( wp_cache_delete( $key, 'default', true ) );
-
 		$this->assertFalse( wp_cache_delete( $key, 'default' ) );
 	}
 
