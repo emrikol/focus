@@ -33,8 +33,6 @@ matrix:
       env: WP_VERSION=latest
     - php: 5.3
       env: WP_VERSION=latest
-    - php: 5.2.4
-      env: WP_VERSION=latest
 
 before_script:
   - export PHPCS_DIR=/tmp/phpcs
