@@ -122,17 +122,13 @@ class FOCUS_Cache {
 	 * @access public
 	 */
 	public function render_admin_page() {
-		if ( ! isset( $_GET['_wpnonce'], $_GET['action'] ) ) { // Input var okay.
-			return;
-		}
-
-		$action = in_array( $_GET['action'], $this->actions, true ) ? sanitize_key( $_GET['action'] ) : false; // Input var okay.
+		$action = in_array( $_GET['action'], $this->actions, true ) ? $_GET['action'] : false; // Input var valided; Input var okay.
 		$nonce = $_GET['_wpnonce']; // Input var okay.
 
 		// request filesystem credentials?
 		if ( false !== $action ) {
 			if ( in_array( $action, $this->actions, true ) && wp_verify_nonce( $nonce, $action ) ) {
-				$url = esc_url_raw( wp_nonce_url( network_admin_url( add_query_arg( 'action', $action, $this->page ) ), $action ) );
+				$url = esc_url_raw( wp_nonce_url( network_admin_url( add_query_arg( 'action', rawurlencode( $action ), $this->page ) ), $action ) );
 				if ( false === $this->initialize_filesystem( $url ) ) {
 					return; // request filesystem credentials.
 				}
@@ -303,7 +299,7 @@ class FOCUS_Cache {
 			}
 
 			if ( in_array( $action, $this->actions, true ) ) {
-				$url = esc_url_raw( wp_nonce_url( network_admin_url( add_query_arg( 'action', $action, $this->page ) ), $action ) );
+				$url = esc_url_raw( wp_nonce_url( network_admin_url( add_query_arg( 'action', rawurlencode( $action ), $this->page ) ), $action ) );
 
 				if ( 'flush-cache' === $action ) {
 					$message = wp_cache_flush() ? 'cache-flushed' : 'flush-cache-failed';
@@ -331,7 +327,7 @@ class FOCUS_Cache {
 
 				// Redirect if status `$message` was set.
 				if ( isset( $message ) ) {
-					wp_safe_redirect( network_admin_url( add_query_arg( 'message', $message, $this->page ) ) );
+					wp_safe_redirect( network_admin_url( add_query_arg( 'message', rawurlencode( $message ), $this->page ) ) );
 					exit;
 				}
 			}
