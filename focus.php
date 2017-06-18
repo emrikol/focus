@@ -335,7 +335,7 @@ class FOCUS_Cache {
 					exit;
 				}
 			}
-		} // End if().
+		} // End if() @codingStandardsIgnoreLine.
 	}
 
 	/**
