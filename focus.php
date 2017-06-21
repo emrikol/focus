@@ -140,12 +140,11 @@ class FOCUS_Cache {
 	 * @access public
 	 */
 	public function render_admin_page() {
-		$action = ( isset( $_GET['action'] ) && in_array( $_GET['action'], $this->actions, true ) ) ? $_GET['action'] : false; // Input var valided; Input var okay.
-		$nonce = isset( $_GET['_wpnonce'] ) ? $_GET['_wpnonce'] : false; // Input var okay.
+		if ( isset( $_GET['action'], $_GET['_wpnonce'] ) ) { // Input var okay.
+			$action = in_array( $_GET['action'], $this->actions, true ) ? $_GET['action'] : false; // @codingStandardsIgnoreLine.
 
-		// request filesystem credentials?
-		if ( false !== $action ) {
-			if ( in_array( $action, $this->actions, true ) && wp_verify_nonce( $nonce, $action ) ) {
+			// request filesystem credentials?
+			if ( false !== $action  && wp_verify_nonce( $_GET['_wpnonce'], $action ) ) { // @codingStandardsIgnoreLine.
 				$url = esc_url_raw( wp_nonce_url( network_admin_url( add_query_arg( 'action', rawurlencode( $action ), $this->page ) ), $action ) );
 				if ( false === $this->initialize_filesystem( $url ) ) {
 					return; // request filesystem credentials.
@@ -307,49 +306,50 @@ class FOCUS_Cache {
 	 * @access public
 	 */
 	public function do_admin_actions() {
-		if ( isset( $_GET['_wpnonce'], $_GET['action'] ) ) { // Input var okay.
-			$action = in_array( $_GET['action'], $this->actions, true ) ? sanitize_key( $_GET['action'] ) : false; // Input var okay.
-			$nonce = $_GET['_wpnonce']; // Input var okay.
+		if ( ! isset( $_GET['_wpnonce'], $_GET['action'] ) ) { // Input var okay.
+			return;
+		}
 
-			// Verify nonce.
-			if ( ! wp_verify_nonce( $nonce, $action ) ) {
-				return;
+		$action = in_array( $_GET['action'], $this->actions, true ) ? sanitize_key( $_GET['action'] ) : false; // @codingStandardsIgnoreLine.
+
+		// Verify nonce.
+		if ( ! wp_verify_nonce( $_GET['_wpnonce'], $action ) ) {// @codingStandardsIgnoreLine.
+			return;
+		}
+
+		if ( in_array( $action, $this->actions, true ) ) {
+			$url = esc_url_raw( wp_nonce_url( network_admin_url( add_query_arg( 'action', rawurlencode( $action ), $this->page ) ), $action ) );
+
+			if ( 'flush-cache' === $action ) {
+				$message = wp_cache_flush() ? 'cache-flushed' : 'flush-cache-failed';
 			}
 
-			if ( in_array( $action, $this->actions, true ) ) {
-				$url = esc_url_raw( wp_nonce_url( network_admin_url( add_query_arg( 'action', rawurlencode( $action ), $this->page ) ), $action ) );
+			// Do we have filesystem credentials?
+			if ( $this->initialize_filesystem( $url, true ) ) {
+				global $wp_filesystem;
 
-				if ( 'flush-cache' === $action ) {
-					$message = wp_cache_flush() ? 'cache-flushed' : 'flush-cache-failed';
-				}
-
-				// Do we have filesystem credentials?
-				if ( $this->initialize_filesystem( $url, true ) ) {
-					global $wp_filesystem;
-
-					switch ( $action ) {
-						case 'enable-cache':
-							$result = $wp_filesystem->copy( plugin_dir_path( __FILE__ ) . '/includes/object-cache.php', WP_CONTENT_DIR . '/object-cache.php', true );
-							$message = $result ? 'cache-enabled' : 'enable-cache-failed';
-							break;
-						case 'disable-cache':
-							$result = $wp_filesystem->delete( WP_CONTENT_DIR . '/object-cache.php' );
-							$message = $result ? 'cache-disabled' : 'disable-cache-failed';
-							break;
-						case 'update-dropin':
-							$result = $wp_filesystem->copy( plugin_dir_path( __FILE__ ) . '/includes/object-cache.php', WP_CONTENT_DIR . '/object-cache.php', true );
-							$message = $result ? 'dropin-updated' : 'update-dropin-failed';
-							break;
-					}
-				}
-
-				// Redirect if status `$message` was set.
-				if ( isset( $message ) ) {
-					wp_safe_redirect( network_admin_url( add_query_arg( 'message', rawurlencode( $message ), $this->page ) ) );
-					exit;
+				switch ( $action ) {
+					case 'enable-cache':
+						$result = $wp_filesystem->copy( plugin_dir_path( __FILE__ ) . '/includes/object-cache.php', WP_CONTENT_DIR . '/object-cache.php', true );
+						$message = $result ? 'cache-enabled' : 'enable-cache-failed';
+						break;
+					case 'disable-cache':
+						$result = $wp_filesystem->delete( WP_CONTENT_DIR . '/object-cache.php' );
+						$message = $result ? 'cache-disabled' : 'disable-cache-failed';
+						break;
+					case 'update-dropin':
+						$result = $wp_filesystem->copy( plugin_dir_path( __FILE__ ) . '/includes/object-cache.php', WP_CONTENT_DIR . '/object-cache.php', true );
+						$message = $result ? 'dropin-updated' : 'update-dropin-failed';
+						break;
 				}
 			}
-		} // End if() @codingStandardsIgnoreLine.
+
+			// Redirect if status `$message` was set.
+			if ( isset( $message ) ) {
+				wp_safe_redirect( network_admin_url( add_query_arg( 'message', rawurlencode( $message ), $this->page ) ) );
+				exit;
+			}
+		}
 	}
 
 	/**
