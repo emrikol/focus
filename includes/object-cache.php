@@ -958,6 +958,21 @@ class WP_Object_Cache {
 	 * @return string The cache file.
 	 */
 	protected function _get_focus_file( $key, $group ) {
+		// Some characters might cause problems with the file system.
+		$protected_chars = array(
+			'/' => rawurlencode( '/' ),
+			'\\' => rawurlencode( '\\' ),
+			'?' => rawurlencode( '?' ),
+			'*' => rawurlencode( '*' ),
+			'|' => rawurlencode( '|' ),
+			'"' => rawurlencode( '"' ),
+			'\'' => rawurlencode( '\'' ),
+			'<' => rawurlencode( '<' ),
+			'>' => rawurlencode( '>' ),
+		);
+
+		$key = str_replace( array_keys( $protected_chars ), $protected_chars, $key );
+
 		return $this->cache_dir . $group . '/' . $key . '.php';
 	}
 
