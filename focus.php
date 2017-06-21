@@ -85,14 +85,32 @@ class FOCUS_Cache {
 	 * @access public
 	 */
 	public function add_admin_menu_page() {
-		add_submenu_page(
-			is_multisite() ? 'settings.php' : 'options-general.php',
-			esc_html__( 'FOCUS Cache', 'focus-cache' ),
-			esc_html__( 'FOCUS Cache', 'focus-cache' ),
-			is_multisite() ? 'manage_network_options' : 'manage_options',
-			'focus-cache',
-			array( $this, 'render_admin_page' )
-		);
+		global $wpmu_version;
+		if ( is_multisite() && $this->is_user_cache_admin() ) {
+			add_submenu_page( 'settings.php', esc_html__( 'FOCUS Cache', 'focus-cache' ), esc_html__( 'FOCUS Cache', 'focus-cache' ), 'manage_network_options', 'focus-cache', array( $this, 'render_admin_page' ) );
+		} elseif ( $this->is_user_cache_admin() ) {
+			add_options_page( esc_html__( 'FOCUS Cache', 'focus-cache' ), esc_html__( 'FOCUS Cache', 'focus-cache' ), 'manage_options', 'focus-cache', array( $this, 'render_admin_page' ) );
+		}
+	}
+
+	/**
+	 * Determines if a user can manage the cache.
+	 *
+	 * @since 0.1.0
+	 * @access public
+	 */
+	public function is_user_cache_admin() {
+		if ( function_exists( 'is_super_admin' ) ) {
+			return is_super_admin();
+		} elseif ( function_exists( 'is_site_admin' ) ) {
+			return is_site_admin();
+		} elseif ( current_user_can( 'manage_network_options' ) && is_multisite() ) {
+			return true;
+		} elseif ( current_user_can( 'manage_options' ) && ! is_multisite() ) {
+			return true;
+		} else {
+			return true;
+		}
 	}
 
 	/**
@@ -122,8 +140,8 @@ class FOCUS_Cache {
 	 * @access public
 	 */
 	public function render_admin_page() {
-		$action = in_array( $_GET['action'], $this->actions, true ) ? $_GET['action'] : false; // Input var valided; Input var okay.
-		$nonce = $_GET['_wpnonce']; // Input var okay.
+		$action = ( isset( $_GET['action'] ) && in_array( $_GET['action'], $this->actions, true ) ) ? $_GET['action'] : false; // Input var valided; Input var okay.
+		$nonce = isset( $_GET['_wpnonce'] ) ? $_GET['_wpnonce'] : false; // Input var okay.
 
 		// request filesystem credentials?
 		if ( false !== $action ) {
@@ -219,7 +237,7 @@ class FOCUS_Cache {
 	 */
 	public function show_admin_notices() {
 		// Only show admin notices to users with the right capability.
-		if ( ! current_user_can( is_multisite() ? 'manage_network_options' : 'manage_options' ) ) {
+		if ( ! $this->is_user_cache_admin() ) {
 			return;
 		}
 
