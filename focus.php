@@ -1,12 +1,13 @@
 <?php
 /**
  * Plugin Name: FOCUS Object Cache
- * Plugin URI: http://wordpress.org/plugins/focus/
+ * Plugin URI: http://wordpress.org/plugins/focus-object-cache/
  * Description: A File-based Object Cache that is Utterly Slow.  Persistenly caches WP_Cache objects in the file system.  Can really help speed up a site that has fast disk access and slow database access.
- * Version: 0.1
+ * Version: 1.0.0
  * Text Domain: focus-cache
  * Author: Derrick Tennant
  * Author URI: https://emrikol.com/
+ * GitHub Plugin URI: https://github.com/emrikol/focus/
  * License: GPLv3
  * License URI: http://www.gnu.org/licenses/gpl-3.0.html
  *

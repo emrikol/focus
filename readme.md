@@ -1,10 +1,10 @@
 # FOCUS Cache 
+**Donate link:** http://wordpressfoundation.org/donate/  
 **Contributors:** emrikol  
 **Tags:** cache, caching  
-**Donate link:** http://wordpressfoundation.org/donate/  
 **Requires at least:** 4.3.11  
 **Tested up to:** 4.8  
-**Stable tag:** 0.1.0  
+**Stable tag:** 1.0.0  
 **License:** GPLv2 or later  
 **License URI:** http://www.gnu.org/licenses/gpl-2.0.html  
 
@@ -24,3 +24,9 @@ I've been heavily influenced by [redis-cache](https://wordpress.org/plugins/redi
 ## Installation 
 
 Install `object-cache.php` to `wp-content/object-cache.php` with a symlink, by copying the file, or via the settings page in the Tools menu.
+
+## Changelog 
+
+### 1.0.0 
+
+First Version
