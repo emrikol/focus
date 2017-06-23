@@ -1,17 +1,18 @@
 # FOCUS Cache 
-**Donate link:** http://wordpressfoundation.org/donate/  
 **Contributors:** emrikol  
+**Donate link:** http://wordpressfoundation.org/donate/  
 **Tags:** cache, caching  
 **Requires at least:** 4.3.11  
 **Tested up to:** 4.8  
-**Stable tag:** 1.0.0  
+**Stable tag:** 1.0.1  
 **License:** GPLv2 or later  
 **License URI:** http://www.gnu.org/licenses/gpl-2.0.html  
 
-File-based Object Cache is Utterly Slow: An Object Caching Dropin for WordPress that uses the local file system
+File-based Object Cache is Utterly Slow: An Object Caching Dropin for WordPress that uses the local file system.
 
 
 ## Description 
+
 [![Build Status](https://travis-ci.org/emrikol/focus.svg?branch=master)](https://travis-ci.org/emrikol/focus)
 
 I needed a persistent object cache while doing work on a budget hosting provider.  A lot of the other file-based caching plugins were either bundled with other things I didn't need (W3 Total Cache), or were old and broken.
@@ -23,10 +24,27 @@ I've been heavily influenced by [redis-cache](https://wordpress.org/plugins/redi
 
 ## Installation 
 
-Install `object-cache.php` to `wp-content/object-cache.php` with a symlink, by copying the file, or via the settings page in the Tools menu.
+Install like any other plugin, directly from your plugins page or manually by copying the files to the `plugins/` folder.  Go to the plugin settings page at Settings->FOCUS Cache and click `Enable Object Cache`.
+
 
 ## Changelog 
+
+
+### 1.0.1 
+
+* Bugfix: Plugin was unable to be activated in the "Add Plugins" page.  This was due to the fact that WordPress detected the wrong PHP file as the plugin and tried to activate it.  Renaming the "Plugin Name" header from the PHP files in the `includes/` directory resolved the issue.  Thanks to @ramonjosegn on the WordPress.org Support Forums for bringing this to my attention.
+* Bugfix: The plugin is now required to be activated across all sites in a multisite installation.
+* Readme updates.
+
 
 ### 1.0.0 
 
 First Version
+
+
+## Upgrade Notice 
+
+
+### 1.0.1 
+
+The plugin can now be properly activated via the "Add Plugins" screen.

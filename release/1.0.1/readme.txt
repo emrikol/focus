@@ -12,8 +12,6 @@ File-based Object Cache is Utterly Slow: An Object Caching Dropin for WordPress 
 
 == Description ==
 
-[![Build Status](https://travis-ci.org/emrikol/focus.svg?branch=master)](https://travis-ci.org/emrikol/focus)
-
 I needed a persistent object cache while doing work on a budget hosting provider.  A lot of the other file-based caching plugins were either bundled with other things I didn't need (W3 Total Cache), or were old and broken.
 
 On the sites I've tested this with, that have slow database servers, I have noticed an increase in page generation times of about 2x.  On the other hand, for sites that have fast database servers it can actually _increase_ page generation time.  Whenever possible, I'd recommend using Memcached, Redis, or your other quality cache of choice.

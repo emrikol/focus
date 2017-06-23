@@ -1,0 +1,27 @@
+{
+  "name": "focus-object-cache",
+  "title": "FOCUS Object Cache",
+  "description": "File-based Object Cache is Utterly Slow: An Object Caching Dropin for WordPress that uses the local file system.",
+  "version": "1.0.1",
+  "homepage": "https://github.com/emrikol/focus",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/emrikol/focus"
+  },
+  "author": {
+    "name": "Derrick Tennant",
+    "email": "emrikol@gmail.com",
+    "url": "https://emrikol.com"
+  },
+  "devDependencies": {
+    "grunt": "^1.0.1",
+    "grunt-contrib-clean": "^1.1.0",
+    "grunt-contrib-compress": "^1.4.3",
+    "grunt-contrib-copy": "^1.0.0",
+    "grunt-shell": "^2.1.0",
+    "grunt-text-replace": "^0.4.0",
+    "grunt-version": "^1.1.1",
+    "load-grunt-tasks": "^3.5.2"
+  },
+  "license": "GPL-3.0"
+}
