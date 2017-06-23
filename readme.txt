@@ -8,10 +8,9 @@ Stable tag: 1.0.0
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
-File-based Object Cache is Utterly Slow: An Object Caching Dropin for WordPress that uses the local file system
+File-based Object Cache is Utterly Slow: An Object Caching Dropin for WordPress that uses the local file system.
 
 == Description ==
-[![Build Status](https://travis-ci.org/emrikol/focus.svg?branch=master)](https://travis-ci.org/emrikol/focus)
 
 I needed a persistent object cache while doing work on a budget hosting provider.  A lot of the other file-based caching plugins were either bundled with other things I didn't need (W3 Total Cache), or were old and broken.
 
@@ -24,6 +23,10 @@ I've been heavily influenced by [redis-cache](https://wordpress.org/plugins/redi
 Install `object-cache.php` to `wp-content/object-cache.php` with a symlink, by copying the file, or via the settings page in the Tools menu.
 
 == Changelog ==
+
+= 1.0.1 =
+
+* Bugfix: Plugin was unable to be activated in the "Add Plugins" page.  This was due to the fact that WordPress detected the wrong PHP file as the plugin and tried to activate it.  Renaming the "Plugin Name" header from the PHP files in the `includes/` directory resolved the issue.  Thanks to @ramonjosegn on the WordPress.org Support Forums for bringing this to my attention.
 
 = 1.0.0 =
 
