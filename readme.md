@@ -38,3 +38,11 @@ Install like any other plugin, directly from your plugins page or manually by co
 ### 1.0.0 
 
 First Version
+
+
+## Upgrade Notice 
+
+
+### 1.0.1 
+
+The plugin can now be properly activated via the "Add Plugins" screen.
