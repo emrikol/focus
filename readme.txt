@@ -20,13 +20,15 @@ I've been heavily influenced by [redis-cache](https://wordpress.org/plugins/redi
 
 == Installation ==
 
-Install `object-cache.php` to `wp-content/object-cache.php` with a symlink, by copying the file, or via the settings page in the Tools menu.
+Install like any other plugin, directly from your plugins page or manually by copying the files to the `plugins/` folder.  Go to the plugin settings page at Settings->FOCUS Cache and click `Enable Object Cache`.
 
 == Changelog ==
 
 = 1.0.1 =
 
 * Bugfix: Plugin was unable to be activated in the "Add Plugins" page.  This was due to the fact that WordPress detected the wrong PHP file as the plugin and tried to activate it.  Renaming the "Plugin Name" header from the PHP files in the `includes/` directory resolved the issue.  Thanks to @ramonjosegn on the WordPress.org Support Forums for bringing this to my attention.
+* Bugfix: The plugin is now required to be activated across all sites in a multisite installation.
+* Readme updates.
 
 = 1.0.0 =
 
