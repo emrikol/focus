@@ -4,15 +4,13 @@ Donate link: http://wordpressfoundation.org/donate/
 Tags: cache, caching
 Requires at least: 4.3.11
 Tested up to: 4.8
-Stable tag: 1.0.1
+Stable tag: 1.0.0
 License: GPLv2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 
 File-based Object Cache is Utterly Slow: An Object Caching Dropin for WordPress that uses the local file system.
 
 == Description ==
-
-[![Build Status](https://travis-ci.org/emrikol/focus.svg?branch=master)](https://travis-ci.org/emrikol/focus)
 
 I needed a persistent object cache while doing work on a budget hosting provider.  A lot of the other file-based caching plugins were either bundled with other things I didn't need (W3 Total Cache), or were old and broken.
 
