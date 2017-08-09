@@ -116,7 +116,7 @@ class FOCUS_Cache {
 	}
 
 	/**
-	 * Returns the cache key prefix, if it exists
+	 * Returns the maximum TTL constant
 	 *
 	 * @since 0.1.0
 	 * @access public
