@@ -63,6 +63,7 @@ class FOCUS_Cache {
 	 * @access public
 	 */
 	public function __construct() {
+		register_activation_hook( __FILE__, array( $this, 'on_activation' ) );
 		register_deactivation_hook( __FILE__, array( $this, 'on_deactivation' ) );
 
 		$this->page = is_multisite() ? 'settings.php?page=focus-cache' : 'options-general.php?page=focus-cache';
@@ -333,15 +334,18 @@ class FOCUS_Cache {
 				switch ( $action ) {
 					case 'enable-cache':
 						$result = $wp_filesystem->copy( plugin_dir_path( __FILE__ ) . '/includes/object-cache.php', WP_CONTENT_DIR . '/object-cache.php', true );
+						wp_cache_flush();
 						$message = $result ? 'cache-enabled' : 'enable-cache-failed';
 						break;
 					case 'disable-cache':
 						$result = $wp_filesystem->delete( WP_CONTENT_DIR . '/object-cache.php' );
 						$message = $result ? 'cache-disabled' : 'disable-cache-failed';
+						wp_cache_flush();
 						break;
 					case 'update-dropin':
 						$result = $wp_filesystem->copy( plugin_dir_path( __FILE__ ) . '/includes/object-cache.php', WP_CONTENT_DIR . '/object-cache.php', true );
 						$message = $result ? 'dropin-updated' : 'update-dropin-failed';
+						wp_cache_flush();
 						break;
 				}
 			}
@@ -400,7 +404,18 @@ class FOCUS_Cache {
 		if ( $this->validate_object_cache_dropin() && $this->initialize_filesystem( '', true ) ) {
 			global $wp_filesystem;
 			$wp_filesystem->delete( WP_CONTENT_DIR . '/object-cache.php' );
+			wp_cache_flush();
 		}
+	}
+
+	/**
+	 * Runs when plugin is activated.
+	 *
+	 * @since 1.0.2
+	 * @access public
+	 */
+	public function on_activation() {
+		wp_cache_flush();
 	}
 }
 
