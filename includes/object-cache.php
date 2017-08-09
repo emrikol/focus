@@ -3,7 +3,7 @@
  * Name: FOCUS Object Cache
  * Plugin URI: http://wordpress.org/plugins/focus-object-cache/
  * Description: File-based Object Cache is Utterly Slow: An Object Caching Dropin for WordPress that uses the local file system.
- * Version: 1.0.0
+ * Version: 1.0.2
  * Text Domain: focus-cache
  * Author: Derrick Tennant
  * Author URI: https://emrikol.com/
@@ -406,7 +406,7 @@ class WP_Object_Cache {
 		if ( defined( 'CACHE_PATH' ) ) {
 			$this->cache_dir = CACHE_PATH;
 		} else {
-			$this->cache_dir = ABSPATH . 'wp-content' . DIRECTORY_SEPARATOR . 'focus-object-cache' . DIRECTORY_SEPARATOR;
+			$this->cache_dir = WP_CONTENT_DIR . DIRECTORY_SEPARATOR . 'focus-object-cache' . DIRECTORY_SEPARATOR;
 		}
 
 		$this->_mkdir( $this->cache_dir );

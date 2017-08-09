@@ -69,7 +69,6 @@ module.exports = function( grunt ) {
 		// Bump plugin: grunt version:plugin:patch; grunt version:readme:patch
 		// Bump dropin: grunt version:dropin:patch
 		// Bump everything: grunt version::patch
-
 		version: {
 			readme: {
 				options: {
