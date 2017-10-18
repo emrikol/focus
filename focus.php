@@ -156,7 +156,7 @@ class FOCUS_Cache {
 		}
 
 		// show admin page.
-		require_once( plugin_dir_path( __FILE__ ) . 'includes/admin-page.php' );
+		require_once plugin_dir_path( __FILE__ ) . 'includes/admin-page.php';
 	}
 
 	/**
@@ -251,9 +251,11 @@ class FOCUS_Cache {
 				$plugin = get_plugin_data( plugin_dir_path( __FILE__ ) . '/includes/object-cache.php' );
 
 				if ( version_compare( $dropin['Version'], $plugin['Version'], '<' ) ) {
+					// translators: %s is the link to update the plugin dropin.
 					$message = sprintf( __( 'The FOCUS cache drop-in is outdated. Please <a href="%s">update it now</a>.', 'focus-cache' ), esc_url( $url ) );
 				}
 			} else {
+				// translators: %s is the link to update the plugin dropin.
 				$message = sprintf( __( 'Another object cache drop-in was found. To use FOCUS Cache, <a href="%s">please replace it now</a>.', 'focus-cache' ), esc_url( $url ) );
 			}
 
@@ -271,8 +273,8 @@ class FOCUS_Cache {
 	 */
 	public function add_admin_page_notices() {
 		// Show action success/failure messages.
-		if ( isset( $_GET['message'] ) ) { // Input var okay.
-			switch ( $_GET['message'] ) { // Input var okay.
+		if ( isset( $_GET['message'] ) ) { // WPCS: CSRF ok. Input var okay.
+			switch ( $_GET['message'] ) { // WPCS: CSRF ok. Input var okay.
 				case 'cache-enabled':
 					$message = esc_html__( 'Object Cache enabled.', 'focus-cache' );
 					break;
@@ -338,12 +340,12 @@ class FOCUS_Cache {
 						$message = $result ? 'cache-enabled' : 'enable-cache-failed';
 						break;
 					case 'disable-cache':
-						$result = $wp_filesystem->delete( WP_CONTENT_DIR . '/object-cache.php' );
+						$result  = $wp_filesystem->delete( WP_CONTENT_DIR . '/object-cache.php' );
 						$message = $result ? 'cache-disabled' : 'disable-cache-failed';
 						wp_cache_flush();
 						break;
 					case 'update-dropin':
-						$result = $wp_filesystem->copy( plugin_dir_path( __FILE__ ) . '/includes/object-cache.php', WP_CONTENT_DIR . '/object-cache.php', true );
+						$result  = $wp_filesystem->copy( plugin_dir_path( __FILE__ ) . '/includes/object-cache.php', WP_CONTENT_DIR . '/object-cache.php', true );
 						$message = $result ? 'dropin-updated' : 'update-dropin-failed';
 						wp_cache_flush();
 						break;
@@ -352,7 +354,7 @@ class FOCUS_Cache {
 
 			// Redirect if status `$message` was set.
 			if ( isset( $message ) ) {
-				wp_safe_redirect( network_admin_url( add_query_arg( 'message', rawurlencode( $message ), $this->page ) ) );
+				wp_safe_redirect( wp_nonce_url( network_admin_url( add_query_arg( 'message', rawurlencode( $message ), $this->page ) ) ) );
 				exit;
 			}
 		}
@@ -373,7 +375,8 @@ class FOCUS_Cache {
 			ob_start();
 		}
 
-		if ( ( $credentials = request_filesystem_credentials( $url ) ) === false ) {
+		$credentials = request_filesystem_credentials( $url );
+		if ( false === $credentials ) {
 			if ( $silent ) {
 				ob_end_clean();
 			}
@@ -419,4 +422,4 @@ class FOCUS_Cache {
 	}
 }
 
-new FOCUS_Cache;
+new FOCUS_Cache();

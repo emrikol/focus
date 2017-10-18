@@ -413,7 +413,7 @@ class WP_Object_Cache {
 
 		$this->_salt_keys( WP_CACHE_KEY_SALT );
 		$this->global_prefix = 'Global';
-		$this->blog_prefix = 'WP';
+		$this->blog_prefix   = 'WP';
 
 		if ( function_exists( 'is_multisite' ) && is_multisite() ) {
 			$this->blog_prefix = 'Site ' . $blog_id;
@@ -454,7 +454,7 @@ class WP_Object_Cache {
 		}
 
 		$group = $this->_sanitize_cache_group( $group );
-		$key = $this->_key( $key, $group );
+		$key   = $this->_key( $key, $group );
 
 		if ( $this->_isset_internal( $key, $group ) ) {
 			return false;
@@ -480,7 +480,7 @@ class WP_Object_Cache {
 		$groups = (array) $groups;
 
 		// Add and dedupe groups.
-		$groups = array_fill_keys( $groups, true );
+		$groups              = array_fill_keys( $groups, true );
 		$this->global_groups = array_merge( $this->global_groups, $groups );
 		$this->global_groups = array_unique( $this->global_groups );
 	}
@@ -497,7 +497,7 @@ class WP_Object_Cache {
 		$groups = (array) $groups;
 
 		// Add and dedupe groups.
-		$groups = array_fill_keys( $groups, true );
+		$groups                      = array_fill_keys( $groups, true );
 		$this->non_persistent_groups = array_merge( $this->non_persistent_groups, $groups );
 		$this->non_persistent_groups = array_unique( $this->non_persistent_groups );
 	}
@@ -515,7 +515,7 @@ class WP_Object_Cache {
 	 */
 	public function decr( $key, $offset = 1, $group = 'default' ) {
 		$group = $this->_sanitize_cache_group( $group );
-		$key = $this->_key( $key, $group );
+		$key   = $this->_key( $key, $group );
 
 		// Key/Group doesn't exist, return false.
 		if ( ! $this->_isset_internal( $key, $group ) ) {
@@ -554,8 +554,8 @@ class WP_Object_Cache {
 	 * @return bool False if the contents weren't deleted and true on success.
 	 */
 	public function delete( $key, $group = 'default' ) {
-		$group = $this->_sanitize_cache_group( $group );
-		$key = $this->_key( $key, $group );
+		$group  = $this->_sanitize_cache_group( $group );
+		$key    = $this->_key( $key, $group );
 		$return = true;
 
 		// Key/Group doesn't exist, return false.
@@ -567,7 +567,7 @@ class WP_Object_Cache {
 		unset( $this->cache[ $group ][ $key ] );
 
 		// Delet the cache file.
-		if ( $this->_focus_file_exists( $key, $group )  ) {
+		if ( $this->_focus_file_exists( $key, $group ) ) {
 			unlink( $this->_get_focus_file( $key, $group ) ); // @codingStandardsIgnoreLine
 		}
 
@@ -647,7 +647,7 @@ class WP_Object_Cache {
 	 */
 	public function get( $key, $group = 'default', $force = false, &$found = null, $stat = true ) {
 		$group = $this->_sanitize_cache_group( $group );
-		$key = $this->_key( $key, $group );
+		$key   = $this->_key( $key, $group );
 
 		// Memory cache exists, please grab.
 		if ( $this->_isset_internal( $key, $group ) && ! $force ) {
@@ -715,7 +715,7 @@ class WP_Object_Cache {
 	 */
 	public function incr( $key, $offset = 1, $group = 'default' ) {
 		$group = $this->_sanitize_cache_group( $group );
-		$key = $this->_key( $key, $group );
+		$key   = $this->_key( $key, $group );
 
 		// Key/Group doesn't exist, return false.
 		if ( ! $this->_isset_internal( $key, $group ) ) {
@@ -760,7 +760,7 @@ class WP_Object_Cache {
 	 */
 	public function replace( $key, $data, $group = 'default', $expire = 0 ) {
 		$group = $this->_sanitize_cache_group( $group );
-		$key = $this->_key( $key, $group );
+		$key   = $this->_key( $key, $group );
 
 		// Key/Group doesn't exist, return false.
 		if ( ! $this->_isset_internal( $key, $group ) ) {
@@ -793,7 +793,7 @@ class WP_Object_Cache {
 	 */
 	public function set( $key, $data, $group = 'default', $expire = 0 ) {
 		$group = $this->_sanitize_cache_group( $group );
-		$key = $this->_key( $key, $group );
+		$key   = $this->_key( $key, $group );
 
 		if ( 0 === $expire ) {
 			$expire = $this->default_expiration;
@@ -828,7 +828,7 @@ class WP_Object_Cache {
 		<h3>Object Cache:</h3>
 		<?php foreach ( $this->group_ops as $group => $ops ) : ?>
 			<?php
-			if ( ! isset( $_GET['debug_queries'] ) && 500 < count( $ops ) ) { // input var ok.
+			if ( ! isset( $_GET['debug_queries'] ) && 500 < count( $ops ) ) { // WPCS: CSRF ok. input var ok.
 				$ops = array_slice( $ops, 0, 500 );
 				echo "<big>Too many to show! <a href='" . esc_url( add_query_arg( 'debug_queries', 'true' ) ) . "'>Show them anyway</a>.</big>\n";
 			}
@@ -875,12 +875,12 @@ class WP_Object_Cache {
 	 */
 	protected function _colorize_debug_line( $line ) {
 		$colors = array(
-			'Get' => 'green',
-			'Set' => 'purple',
-			'Add' => 'blue',
+			'Get'    => 'green',
+			'Set'    => 'purple',
+			'Add'    => 'blue',
 			'Delete' => 'red',
-			'Hit' => 'orange',
-			'Miss' => 'brown',
+			'Hit'    => 'orange',
+			'Miss'   => 'brown',
 		);
 
 		$cmd = substr( $line, 0, strpos( $line, ' ' ) );
@@ -961,15 +961,15 @@ class WP_Object_Cache {
 	protected function _get_focus_file( $key, $group ) {
 		// Some characters might cause problems with the file system.
 		$protected_chars = array(
-			'/' => rawurlencode( '/' ),
+			'/'  => rawurlencode( '/' ),
 			'\\' => rawurlencode( '\\' ),
-			'?' => rawurlencode( '?' ),
-			'*' => rawurlencode( '*' ),
-			'|' => rawurlencode( '|' ),
-			'"' => rawurlencode( '"' ),
+			'?'  => rawurlencode( '?' ),
+			'*'  => rawurlencode( '*' ),
+			'|'  => rawurlencode( '|' ),
+			'"'  => rawurlencode( '"' ),
 			'\'' => rawurlencode( '\'' ),
-			'<' => rawurlencode( '<' ),
-			'>' => rawurlencode( '>' ),
+			'<'  => rawurlencode( '<' ),
+			'>'  => rawurlencode( '>' ),
 		);
 
 		$key = str_replace( array_keys( $protected_chars ), $protected_chars, $key );
@@ -1004,7 +1004,7 @@ class WP_Object_Cache {
 
 		// Remove whitespace.
 		$prefix = preg_replace( '/\s+/', '', $prefix );
-		$key = preg_replace( '/\s+/', '', $key );
+		$key    = preg_replace( '/\s+/', '', $key );
 
 		$normalized_key = $prefix . ':' . $key;
 
@@ -1041,7 +1041,7 @@ class WP_Object_Cache {
 	 */
 	protected function _make_group_dir( $group = 'default' ) {
 		$cache_dir = $this->cache_dir;
-		$make_dir = '';
+		$make_dir  = '';
 
 		foreach ( explode( '/', $group ) as $subdir ) {
 			$make_dir .= $subdir . '/';
@@ -1061,8 +1061,8 @@ class WP_Object_Cache {
 	 */
 	protected function _mkdir( $dir ) {
 		// Give the new dirs the same perms as wp-content.
-		$stat = stat( ABSPATH . 'wp-content' );
-		$dir_perms = $stat['mode'] & 0007777; // Get the permission bits.
+		$stat       = stat( ABSPATH . 'wp-content' );
+		$dir_perms  = $stat['mode'] & 0007777; // Get the permission bits.
 		$file_perms = $dir_perms & 0000666; // Remove execute bits for files.
 
 		// Make the base cache dir.
@@ -1094,7 +1094,8 @@ class WP_Object_Cache {
 			return false;
 		}
 
-		while ( false !== ( $file_object = readdir( $dir_object ) ) ) {
+		$file_object = readdir( $dir_object );
+		while ( false !== $file_object ) {
 			if ( '.' === $file_object || '..' === $file_object ) {
 				continue;
 			}
@@ -1106,6 +1107,7 @@ class WP_Object_Cache {
 			} else {
 				unlink( $dir_path ); // @codingStandardsIgnoreLine
 			}
+			$file_object = readdir( $dir_object )
 		}
 
 		closedir( $dir_object );
@@ -1147,13 +1149,13 @@ class WP_Object_Cache {
 		}
 
 		// Give the new dirs the same perms as wp-content.
-		$stat = stat( ABSPATH . 'wp-content' );
-		$dir_perms = $stat['mode'] & 0007777; // Get the permission bits.
+		$stat       = stat( ABSPATH . 'wp-content' );
+		$dir_perms  = $stat['mode'] & 0007777; // Get the permission bits.
 		$file_perms = $dir_perms & 0000666; // Remove execute bits for files.
 
 		// Make FOCUS Cache directories and temp file.
 		$this->_mkdir( $cache_dir );
-		$group_dir = $this->_make_group_dir( $group, $dir_perms );
+		$group_dir  = $this->_make_group_dir( $group, $dir_perms );
 		$cache_file = $this->_get_focus_file( $key, $group );
 		$temp_file = tempnam( $cache_dir, 'tmp' ); // @codingStandardsIgnoreLine
 		if ( false === $temp_file ) {
