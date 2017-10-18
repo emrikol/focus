@@ -354,7 +354,7 @@ class FOCUS_Cache {
 
 			// Redirect if status `$message` was set.
 			if ( isset( $message ) ) {
-				wp_safe_redirect( wp_nonce_url( network_admin_url( add_query_arg( 'message', rawurlencode( $message ), $this->page ) ) ) );
+				wp_safe_redirect( network_admin_url( add_query_arg( 'message', rawurlencode( $message ), $this->page ) ) );
 				exit;
 			}
 		}
