@@ -970,6 +970,7 @@ class WP_Object_Cache {
 			'\'' => rawurlencode( '\'' ),
 			'<' => rawurlencode( '<' ),
 			'>' => rawurlencode( '>' ),
+			':' => rawurlencode( ':' ),
 		);
 
 		$key = str_replace( array_keys( $protected_chars ), $protected_chars, $key );
