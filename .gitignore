@@ -3,3 +3,4 @@ vendor/
 composer.lock
 $WP_TESTS_DIR/
 /.phpunit.cache
+.DS_Store

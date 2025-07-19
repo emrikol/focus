@@ -4,7 +4,7 @@ set -euo pipefail
 
 # --- CONFIGURATION ---
 PHP_VERSION="8.2"
-WP_VERSION="6.5"
+WP_VERSION="trunk"
 DB_CONTAINER_NAME="wp-test-db-$$"
 PHP_CONTAINER_NAME="wp-test-runner-$$"
 DB_VOLUME_NAME="wp-test-db-volume-$$"
@@ -20,6 +20,14 @@ DEBUG=false
 SHELL_MODE=false
 PHPUNIT_CONFIG=""
 PHPUNIT_GROUPS=""
+ARGS=""
+CI_MODE=false
+
+# Detect CI environment
+if [ -n "${CI:-}" ] || [ -n "${GITHUB_ACTIONS:-}" ] || [ -n "${TRAVIS:-}" ] || [ -n "${CIRCLECI:-}" ]; then
+  # shellcheck disable=SC2034
+  CI_MODE=true
+fi
 
 # Export variables needed in Docker environment
 export WITH_WP_ENV
@@ -27,6 +35,7 @@ export DEBUG
 export SHELL_MODE
 export PHPUNIT_CONFIG
 export PHPUNIT_GROUPS
+export ARGS
 
 # --- COLOR FUNCTIONS ---
 # Color codes
@@ -59,75 +68,124 @@ prefix_output() {
 }
 
 # --- ARG PARSING ---
+ARGS=""
 for arg in "$@"; do
-  if [[ "$arg" == "--multisite" ]]; then
-    PHPUNIT_CONFIG="-c tests/phpunit/multisite.xml"
-  elif [[ "$arg" == "--ajax" ]]; then
-    if [[ -n "$PHPUNIT_GROUPS" ]]; then
-      PHPUNIT_GROUPS="$PHPUNIT_GROUPS,ajax"
-    else
-      PHPUNIT_GROUPS="--group ajax"
-    fi
-  elif [[ "$arg" == "--ms-files" ]]; then
-    if [[ -n "$PHPUNIT_GROUPS" ]]; then
-      PHPUNIT_GROUPS="$PHPUNIT_GROUPS,ms-files"
-    else
-      PHPUNIT_GROUPS="--group ms-files"
-    fi
-  elif [[ "$arg" == "--external-http" ]]; then
-    if [[ -n "$PHPUNIT_GROUPS" ]]; then
-      PHPUNIT_GROUPS="$PHPUNIT_GROUPS,external-http"
-    else
-      PHPUNIT_GROUPS="--group external-http"
-    fi
-  elif [[ "$arg" == "--cleanup" ]]; then
-    echo "🧹 Cleaning up all test containers and volumes..."
-    
-    # Remove all test containers
-    echo "🛑 Removing test containers..."
-    docker ps -a --format "{{.Names}}" | grep "^wp-test-" | xargs -r docker rm -f >/dev/null 2>&1 || true
-    
-    # Wait for containers to be removed
-    sleep 1
-    
-    # Remove all test volumes
-    echo "🗑️  Removing test volumes..."
-    docker volume ls --format "{{.Name}}" | grep "^wp-test-db-volume-" | xargs -r docker volume rm >/dev/null 2>&1 || true
-    
-    echo "✅ Cleanup complete!"
-    exit 0
-  elif [[ "$arg" == "--debug" ]]; then
-    DEBUG=true
-  elif [[ "$arg" == "--shell" ]]; then
-    SHELL_MODE=true
-  elif [[ "$arg" == "--help" || "$arg" == "-h" ]]; then
-    echo "WordPress Test Runner"
-    echo ""
-    echo "Usage: $0 [options]"
-    echo ""
-    echo "Options:"
-    echo "  --multisite      Use multisite configuration (tests/phpunit/multisite.xml)"
-    echo "  --ajax           Run tests in ajax group only"
-    echo "  --ms-files       Run tests in ms-files group only"
-    echo "  --external-http  Run tests in external-http group only"
-    echo "  --cleanup        Remove all leftover test containers and volumes"
-    echo "  --debug          Show verbose output from all tools (apt, composer, etc.)"
-    echo "  --shell          Drop into interactive shell in test environment for debugging"
-    echo "  --help, -h       Show this help message"
-    echo ""
-    echo "Examples:"
-    echo "  $0                    # Run tests (auto-detects WordPress and sets up environment)"
-    echo "  $0 --multisite        # Run multisite tests with custom configuration"
-    echo "  $0 --ajax             # Run only ajax group tests"
-    echo "  $0 --ms-files         # Run only ms-files group tests"
-    echo "  $0 --external-http    # Run only external-http group tests"
-    echo "  $0 --ajax --ms-files  # Run tests from ajax and ms-files groups"
-    echo "  $0 --multisite --ajax # Run multisite tests from ajax group only"
-    echo "  $0 --debug            # Run tests with verbose output"
-    echo "  $0 --shell            # Interactive debugging shell"
-    echo "  $0 --cleanup          # Clean up leftover Docker resources"
-    exit 0
-  fi
+  case "$arg" in
+    --multisite)
+      PHPUNIT_CONFIG="-c tests/phpunit/multisite.xml"
+      ;;
+    --ajax)
+      if [[ -n "$PHPUNIT_GROUPS" ]]; then
+        PHPUNIT_GROUPS="$PHPUNIT_GROUPS,ajax"
+      else
+        PHPUNIT_GROUPS="--group ajax"
+      fi
+      ;;
+    --ms-files)
+      if [[ -n "$PHPUNIT_GROUPS" ]]; then
+        PHPUNIT_GROUPS="$PHPUNIT_GROUPS,ms-files"
+      else
+        PHPUNIT_GROUPS="--group ms-files"
+      fi
+      ;;
+    --external-http)
+      if [[ -n "$PHPUNIT_GROUPS" ]]; then
+        PHPUNIT_GROUPS="$PHPUNIT_GROUPS,external-http"
+      else
+        PHPUNIT_GROUPS="--group external-http"
+      fi
+      ;;
+    --php)
+      shift
+      if [ $# -gt 0 ]; then
+        PHP_VERSION="$1"
+      fi
+      ;;
+    --wp)
+      shift
+      if [ $# -gt 0 ]; then
+        WP_VERSION="$1"
+      fi
+      ;;
+    --filter|--testdox|--coverage-*)
+      # Pass PHPUnit-specific args through
+      ARGS="$ARGS $arg"
+      ;;
+    --lint)
+      # Run PHP linting only
+      echo "🔍 Running PHP lint check..."
+      if command -v npx &> /dev/null; then
+        npx phplint '**/*.php' '!vendor/**' '!node_modules/**' || exit 1
+      else
+        find . -name "*.php" -not -path "./vendor/*" -exec php -l {} \; || exit 1
+      fi
+      echo "✅ PHP lint check passed"
+      exit 0
+      ;;
+    --debug)
+      DEBUG=true
+      ;;
+    --shell)
+      SHELL_MODE=true
+      ;;
+    --cleanup)
+      echo "🧹 Cleaning up all test containers and volumes..."
+      
+      # Remove all test containers
+      echo "🛑 Removing test containers..."
+      docker ps -a --format "{{.Names}}" | grep "^wp-test-" | xargs -r docker rm -f >/dev/null 2>&1 || true
+      
+      # Wait for containers to be removed
+      sleep 1
+      
+      # Remove all test volumes
+      echo "🗑️  Removing test volumes..."
+      docker volume ls --format "{{.Name}}" | grep "^wp-test-db-volume-" | xargs -r docker volume rm >/dev/null 2>&1 || true
+      
+      echo "✅ Cleanup complete!"
+      exit 0
+      ;;
+    --help|-h)
+      echo "WordPress Test Runner"
+      echo ""
+      echo "Usage: $0 [options] [phpunit-args]"
+      echo ""
+      echo "Test Options:"
+      echo "  --multisite      Use multisite configuration (tests/phpunit/multisite.xml)"
+      echo "  --ajax           Run tests in ajax group only"
+      echo "  --ms-files       Run tests in ms-files group only"
+      echo "  --external-http  Run tests in external-http group only"
+      echo ""
+      echo "Environment Options:"
+      echo "  --php VERSION    PHP version to use (default: 8.2)"
+      echo "  --wp VERSION     WordPress version to use (default: trunk)"
+      echo ""
+      echo "Utility Options:"
+      echo "  --lint           Run PHP syntax check only"
+      echo "  --cleanup        Remove all leftover test containers and volumes"
+      echo "  --debug          Show verbose output from all tools"
+      echo "  --shell          Drop into interactive shell in test environment"
+      echo "  --help, -h       Show this help message"
+      echo ""
+      echo "PHPUnit Options (passed through):"
+      echo "  --filter PATTERN Filter tests by pattern"
+      echo "  --testdox        Generate testdox output"
+      echo "  --coverage-*     Coverage options"
+      echo ""
+      echo "Examples:"
+      echo "  $0                          # Run all tests"
+      echo "  $0 --php 8.1 --wp 6.4      # Test with PHP 8.1 and WordPress 6.4"
+      echo "  $0 --filter test_cache      # Run tests matching 'test_cache'"
+      echo "  $0 --multisite --ajax       # Run multisite ajax tests"
+      echo "  $0 --lint                   # Check PHP syntax only"
+      echo "  $0 --debug --shell          # Interactive debugging"
+      exit 0
+      ;;
+    *)
+      # Pass unknown args to PHPUnit
+      ARGS="$ARGS $arg"
+      ;;
+  esac
 done
 
 # Auto-detect WordPress plugin and enable WordPress test environment
@@ -138,7 +196,7 @@ if grep -l "Plugin Name:" ./*.php 2>/dev/null >/dev/null; then
   fi
   WITH_WP_ENV=true
 # Check for WordPress test classes
-elif grep -q "WP_UnitTestCase\|extends.*WP_" tests/php/*.php 2>/dev/null; then
+elif grep -q "WP_UnitTestCase\|extends.*WP_" tests/*.php 2>/dev/null; then
   if [ "$DEBUG" = true ]; then
     echo "🔍 WordPress tests detected - setting up WordPress test environment"
   fi
@@ -453,6 +511,7 @@ if [ "$SHELL_MODE" = true ]; then
     -e DEBUG="true" \
     -e PHPUNIT_CONFIG="$PHPUNIT_CONFIG" \
     -e PHPUNIT_GROUPS="$PHPUNIT_GROUPS" \
+    -e ARGS="$ARGS" \
     php:"$PHP_VERSION"-cli bash -c "
     set -euo pipefail
     
@@ -504,10 +563,16 @@ if [ "$SHELL_MODE" = true ]; then
       echo '🧪 Setting up WordPress test environment...'
       WP_TESTS_DIR=/tmp/wordpress-tests-lib
       rm -rf \$WP_TESTS_DIR && mkdir -p \$WP_TESTS_DIR
-      svn export --quiet https://develop.svn.wordpress.org/tags/$WP_VERSION/tests/phpunit/includes/ \$WP_TESTS_DIR/includes >/dev/null 2>&1
-      svn export --quiet https://develop.svn.wordpress.org/tags/$WP_VERSION/tests/phpunit/data/ \$WP_TESTS_DIR/data >/dev/null 2>&1
-      svn export --quiet https://develop.svn.wordpress.org/tags/$WP_VERSION/src/ \$WP_TESTS_DIR/src >/dev/null 2>&1
-      svn export --quiet https://develop.svn.wordpress.org/tags/$WP_VERSION/wp-tests-config-sample.php wp-tests-config.php >/dev/null 2>&1
+      # Determine correct SVN path based on WP version
+      if [ \"$WP_VERSION\" = \"trunk\" ]; then
+        WP_TESTS_TAG=\"trunk\"
+      else
+        WP_TESTS_TAG=\"tags/$WP_VERSION\"
+      fi
+      svn export --quiet https://develop.svn.wordpress.org/\$WP_TESTS_TAG/tests/phpunit/includes/ \$WP_TESTS_DIR/includes >/dev/null 2>&1
+      svn export --quiet https://develop.svn.wordpress.org/\$WP_TESTS_TAG/tests/phpunit/data/ \$WP_TESTS_DIR/data >/dev/null 2>&1
+      svn export --quiet https://develop.svn.wordpress.org/\$WP_TESTS_TAG/src/ \$WP_TESTS_DIR/src >/dev/null 2>&1
+      svn export --quiet https://develop.svn.wordpress.org/\$WP_TESTS_TAG/wp-tests-config-sample.php wp-tests-config.php >/dev/null 2>&1
       sed -i \"s/youremptytestdbnamehere/$DB_NAME/\" wp-tests-config.php
       sed -i \"s/yourusernamehere/$DB_USER/\" wp-tests-config.php
       sed -i \"s/yourpasswordhere/$DB_PASSWORD/\" wp-tests-config.php
@@ -550,7 +615,7 @@ if [ "$SHELL_MODE" = true ]; then
     echo 'echo \"Environment loaded. PHPUNIT_CMD=\$PHPUNIT_CMD\"' >> /tmp/.focus-bashrc
     
     # Start interactive bash shell with our custom bashrc
-    bash --rcfile /tmp/.focus-bashrc
+    exec bash --rcfile /tmp/.focus-bashrc
   "
   exit 0
 fi
@@ -571,6 +636,7 @@ if [ "$DEBUG" = true ]; then
     -e DEBUG="$DEBUG" \
     -e PHPUNIT_CONFIG="$PHPUNIT_CONFIG" \
     -e PHPUNIT_GROUPS="$PHPUNIT_GROUPS" \
+    -e ARGS="$ARGS" \
     php:"$PHP_VERSION"-cli bash -c "
     set -euo pipefail
 
@@ -648,21 +714,27 @@ if [ "$DEBUG" = true ]; then
       WP_TESTS_DIR=/tmp/wordpress-tests-lib
       rm -rf \\\$WP_TESTS_DIR
       mkdir -p \\\$WP_TESTS_DIR
+      # Determine correct SVN path based on WP version
+      if [ \"$WP_VERSION\" = \"trunk\" ]; then
+        WP_TESTS_TAG=\"trunk\"
+      else
+        WP_TESTS_TAG=\"tags/$WP_VERSION\"
+      fi
       
       if [ \"\$DEBUG\" = \"true\" ]; then
-        (svn export --quiet https://develop.svn.wordpress.org/tags/$WP_VERSION/tests/phpunit/includes/ \\\$WP_TESTS_DIR/includes &&
-         svn export --quiet https://develop.svn.wordpress.org/tags/$WP_VERSION/tests/phpunit/data/     \\\$WP_TESTS_DIR/data &&
-         svn export --quiet https://develop.svn.wordpress.org/tags/$WP_VERSION/src/                    \\\$WP_TESTS_DIR/src &&
-         svn export --quiet https://develop.svn.wordpress.org/tags/$WP_VERSION/wp-tests-config-sample.php wp-tests-config.php) 2>&1 | while IFS= read -r line; do
+        (svn export --quiet https://develop.svn.wordpress.org/\$WP_TESTS_TAG/tests/phpunit/includes/ \\\$WP_TESTS_DIR/includes &&
+         svn export --quiet https://develop.svn.wordpress.org/\$WP_TESTS_TAG/tests/phpunit/data/     \\\$WP_TESTS_DIR/data &&
+         svn export --quiet https://develop.svn.wordpress.org/\$WP_TESTS_TAG/src/                    \\\$WP_TESTS_DIR/src &&
+         svn export --quiet https://develop.svn.wordpress.org/\$WP_TESTS_TAG/wp-tests-config-sample.php wp-tests-config.php) 2>&1 | while IFS= read -r line; do
           if [ -n \"\$line\" ]; then
             printf \"\033[0;35m[svn]\033[0m %s\n\" \"\$line\"
           fi
         done
       else
-        svn export --quiet https://develop.svn.wordpress.org/tags/$WP_VERSION/tests/phpunit/includes/ \\\$WP_TESTS_DIR/includes >/dev/null 2>&1 &&
-        svn export --quiet https://develop.svn.wordpress.org/tags/$WP_VERSION/tests/phpunit/data/     \\\$WP_TESTS_DIR/data >/dev/null 2>&1 &&
-        svn export --quiet https://develop.svn.wordpress.org/tags/$WP_VERSION/src/                    \\\$WP_TESTS_DIR/src >/dev/null 2>&1 &&
-        svn export --quiet https://develop.svn.wordpress.org/tags/$WP_VERSION/wp-tests-config-sample.php wp-tests-config.php >/dev/null 2>&1
+        svn export --quiet https://develop.svn.wordpress.org/\$WP_TESTS_TAG/tests/phpunit/includes/ \\\$WP_TESTS_DIR/includes >/dev/null 2>&1 &&
+        svn export --quiet https://develop.svn.wordpress.org/\$WP_TESTS_TAG/tests/phpunit/data/     \\\$WP_TESTS_DIR/data >/dev/null 2>&1 &&
+        svn export --quiet https://develop.svn.wordpress.org/\$WP_TESTS_TAG/src/                    \\\$WP_TESTS_DIR/src >/dev/null 2>&1 &&
+        svn export --quiet https://develop.svn.wordpress.org/\$WP_TESTS_TAG/wp-tests-config-sample.php wp-tests-config.php >/dev/null 2>&1
       fi
 
       sed -i \"s/youremptytestdbnamehere/$DB_NAME/\" wp-tests-config.php
@@ -691,7 +763,7 @@ if [ "$DEBUG" = true ]; then
     
     # Run PHPUnit with conditional colored prefix
     if [ \"\$DEBUG\" = \"true\" ]; then
-      \$PHPUNIT_CMD \$PHPUNIT_CONFIG \$PHPUNIT_GROUPS 2>&1 | while IFS= read -r line; do
+      \$PHPUNIT_CMD \$PHPUNIT_CONFIG \$PHPUNIT_GROUPS \$ARGS 2>&1 | while IFS= read -r line; do
         if [ -n \"\$line\" ]; then
           printf \"\033[0;36m[phpunit]\033[0m %s\n\" \"\$line\"
         else
@@ -700,7 +772,7 @@ if [ "$DEBUG" = true ]; then
       done
       PHPUNIT_EXIT=\${PIPESTATUS[0]}
     else
-      \$PHPUNIT_CMD \$PHPUNIT_CONFIG \$PHPUNIT_GROUPS
+      \$PHPUNIT_CMD \$PHPUNIT_CONFIG \$PHPUNIT_GROUPS \$ARGS
       PHPUNIT_EXIT=\$?
     fi
     
@@ -729,6 +801,7 @@ else
       -e DEBUG="$DEBUG" \
       -e PHPUNIT_CONFIG="$PHPUNIT_CONFIG" \
       -e PHPUNIT_GROUPS="$PHPUNIT_GROUPS" \
+      -e ARGS="$ARGS" \
       php:"$PHP_VERSION"-cli bash -c "
         set -euo pipefail
         apt-get update -qq >/dev/null 2>&1 && apt-get install -y -qq unzip git curl libzip-dev mariadb-client subversion libpng-dev libjpeg-dev libfreetype6-dev >/dev/null 2>&1
@@ -758,10 +831,16 @@ else
         if [ \"\$WITH_WP_ENV\" = \"true\" ]; then
           WP_TESTS_DIR=/tmp/wordpress-tests-lib
           rm -rf \$WP_TESTS_DIR && mkdir -p \$WP_TESTS_DIR
-          svn export --quiet https://develop.svn.wordpress.org/tags/6.5/tests/phpunit/includes/ \$WP_TESTS_DIR/includes >/dev/null 2>&1
-          svn export --quiet https://develop.svn.wordpress.org/tags/6.5/tests/phpunit/data/ \$WP_TESTS_DIR/data >/dev/null 2>&1
-          svn export --quiet https://develop.svn.wordpress.org/tags/6.5/src/ \$WP_TESTS_DIR/src >/dev/null 2>&1
-          svn export --quiet https://develop.svn.wordpress.org/tags/6.5/wp-tests-config-sample.php wp-tests-config.php >/dev/null 2>&1
+          # Determine correct SVN path based on WP version
+          if [ \"$WP_VERSION\" = \"trunk\" ]; then
+            WP_TESTS_TAG=\"trunk\"
+          else
+            WP_TESTS_TAG=\"tags/$WP_VERSION\"
+          fi
+          svn export --quiet https://develop.svn.wordpress.org/\$WP_TESTS_TAG/tests/phpunit/includes/ \$WP_TESTS_DIR/includes >/dev/null 2>&1
+          svn export --quiet https://develop.svn.wordpress.org/\$WP_TESTS_TAG/tests/phpunit/data/ \$WP_TESTS_DIR/data >/dev/null 2>&1
+          svn export --quiet https://develop.svn.wordpress.org/\$WP_TESTS_TAG/src/ \$WP_TESTS_DIR/src >/dev/null 2>&1
+          svn export --quiet https://develop.svn.wordpress.org/\$WP_TESTS_TAG/wp-tests-config-sample.php wp-tests-config.php >/dev/null 2>&1
           sed -i \"s/youremptytestdbnamehere/$DB_NAME/\" wp-tests-config.php
           sed -i \"s/yourusernamehere/$DB_USER/\" wp-tests-config.php
           sed -i \"s/yourpasswordhere/$DB_PASSWORD/\" wp-tests-config.php
@@ -777,7 +856,7 @@ else
         echo \"📋 \$SEPARATOR_LINE\"
         echo \"📋 ✅ PHPUnit Test Results\"
         echo \"📋 \$SEPARATOR_LINE\"
-        \$PHPUNIT_CMD \$PHPUNIT_CONFIG \$PHPUNIT_GROUPS
+        \$PHPUNIT_CMD \$PHPUNIT_CONFIG \$PHPUNIT_GROUPS \$ARGS
         PHPUNIT_EXIT=\$?
         echo \"📋 \$SEPARATOR_LINE\"
         if [ \$PHPUNIT_EXIT -eq 0 ]; then

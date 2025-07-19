@@ -16,10 +16,10 @@
   "require-dev": {
     "dealerdirect/phpcodesniffer-composer-installer": "^1.0",
     "phpcompatibility/phpcompatibility-wp": "^2",
-    "phpunit/phpunit": "^10.0",
+    "phpunit/phpunit": "^9.6",
     "wp-coding-standards/wpcs": "^3.0",
     "wpreadme2markdown/wp2md": "*",
-    "yoast/phpunit-polyfills": "^2.0"
+    "yoast/phpunit-polyfills": "^1.0"
   },
   "config": {
     "allow-plugins": {
