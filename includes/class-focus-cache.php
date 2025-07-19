@@ -1,25 +1,5 @@
 <?php
 /**
- * Plugin Name: FOCUS Object Cache
- * Plugin URI: http://wordpress.org/plugins/focus-object-cache/
- * Description: File-based Object Cache is Utterly Slow: An Object Caching Dropin for WordPress that uses the local file system.
- * Version: 1.0.1
- * Text Domain: focus-cache
- * Author: Derrick Tennant
- * Author URI: https://emrikol.com/
- * GitHub Plugin URI: https://github.com/emrikol/focus/
- * License: GPLv3
- * License URI: http://www.gnu.org/licenses/gpl-3.0.html
- * Network: true
- *
- * @package WordPress
- */
-
-if ( ! defined( 'ABSPATH' ) ) {
-	exit;
-}
-
-/**
  *
  * This implementation of the object cache uses flat files to store objects
  * and overrides the core non-persistent cache.
@@ -63,6 +43,7 @@ class FOCUS_Cache {
 	 * @access public
 	 */
 	public function __construct() {
+		register_activation_hook( __FILE__, array( $this, 'on_activation' ) );
 		register_deactivation_hook( __FILE__, array( $this, 'on_deactivation' ) );
 
 		$this->page = is_multisite() ? 'settings.php?page=focus-cache' : 'options-general.php?page=focus-cache';
@@ -73,11 +54,14 @@ class FOCUS_Cache {
 		add_action( 'load-' . $this->screen, array( $this, 'do_admin_actions' ) );
 		add_action( 'load-' . $this->screen, array( $this, 'add_admin_page_notices' ) );
 
-		add_filter( sprintf(
-			'%splugin_action_links_%s',
-			is_multisite() ? 'network_admin_' : '',
-			plugin_basename( __FILE__ )
-		), array( $this, 'add_plugin_actions_links' ) );
+		add_filter(
+			sprintf(
+				'%splugin_action_links_%s',
+				is_multisite() ? 'network_admin_' : '',
+				plugin_basename( __FILE__ )
+			),
+			array( $this, 'add_plugin_actions_links' )
+		);
 	}
 
 	/**
@@ -86,7 +70,7 @@ class FOCUS_Cache {
 	 * @since 0.1.0
 	 * @access public
 	 */
-	public function add_admin_menu_page() {
+	public function add_admin_menu_page(): void {
 		global $wpmu_version;
 		if ( is_multisite() && $this->is_user_cache_admin() ) {
 			add_submenu_page( 'settings.php', esc_html__( 'FOCUS Cache', 'focus-cache' ), esc_html__( 'FOCUS Cache', 'focus-cache' ), 'manage_network_options', 'focus-cache', array( $this, 'render_admin_page' ) );
@@ -100,12 +84,12 @@ class FOCUS_Cache {
 	 *
 	 * @since 0.1.0
 	 * @access public
+	 * 
+	 * @return bool True if the user can manage the cache, false otherwise.
 	 */
-	public function is_user_cache_admin() {
+	public function is_user_cache_admin(): bool {
 		if ( function_exists( 'is_super_admin' ) ) {
 			return is_super_admin();
-		} elseif ( function_exists( 'is_site_admin' ) ) {
-			return is_site_admin();
 		} elseif ( current_user_can( 'manage_network_options' ) && is_multisite() ) {
 			return true;
 		} elseif ( current_user_can( 'manage_options' ) && ! is_multisite() ) {
@@ -116,13 +100,15 @@ class FOCUS_Cache {
 	}
 
 	/**
-	 * Returns the cache key prefix, if it exists
+	 * Returns the maximum TTL constant
 	 *
 	 * @since 0.1.0
 	 * @access public
+	 * 
+	 * @return int The maximum TTL in seconds.
 	 */
-	public function get_focus_maxttl() {
-		return defined( 'WP_FOCUS_MAXTTL' ) ? WP_FOCUS_MAXTTL : null;
+	public function get_focus_maxttl(): int {
+		return defined( 'WP_FOCUS_MAXTTL' ) ? WP_FOCUS_MAXTTL : YEAR_IN_SECONDS;
 	}
 
 	/**
@@ -130,9 +116,11 @@ class FOCUS_Cache {
 	 *
 	 * @since 0.1.0
 	 * @access public
+	 * 
+	 * @return string The cache key prefix.
 	 */
-	public function get_focus_cachekey_prefix() {
-		return defined( 'WP_CACHE_KEY_SALT' ) ? WP_CACHE_KEY_SALT : null;
+	public function get_focus_cachekey_prefix(): string{
+		return defined( 'WP_CACHE_KEY_SALT' ) ? WP_CACHE_KEY_SALT : '';
 	}
 
 	/**
@@ -141,7 +129,7 @@ class FOCUS_Cache {
 	 * @since 0.1.0
 	 * @access public
 	 */
-	public function render_admin_page() {
+	public function render_admin_page(): void {
 		if ( isset( $_GET['action'], $_GET['_wpnonce'] ) ) { // Input var okay.
 			$action = in_array( $_GET['action'], $this->actions, true ) ? $_GET['action'] : false; // @codingStandardsIgnoreLine.
 
@@ -155,7 +143,7 @@ class FOCUS_Cache {
 		}
 
 		// show admin page.
-		require_once( plugin_dir_path( __FILE__ ) . 'includes/admin-page.php' );
+		require_once plugin_dir_path( __FILE__ ) . 'includes/admin-page.php';
 	}
 
 	/**
@@ -168,7 +156,7 @@ class FOCUS_Cache {
 	 *
 	 * @return array Filtered plugin action links.
 	 */
-	public function add_plugin_actions_links( $links ) {
+	public function add_plugin_actions_links( array $links ): array {
 		return array_merge(
 			array( sprintf( '<a href="%s">Settings</a>', esc_url( network_admin_url( $this->page ) ) ) ),
 			$links
@@ -183,7 +171,7 @@ class FOCUS_Cache {
 	 *
 	 * @return bool Existential status of dropin file.
 	 */
-	public function object_cache_dropin_exists() {
+	public function object_cache_dropin_exists(): bool {
 		return file_exists( WP_CONTENT_DIR . '/object-cache.php' );
 	}
 
@@ -195,7 +183,7 @@ class FOCUS_Cache {
 	 *
 	 * @return bool Existential status of dropin file.
 	 */
-	public function validate_object_cache_dropin() {
+	public function validate_object_cache_dropin(): bool {
 		if ( ! $this->object_cache_dropin_exists() ) {
 			return false;
 		}
@@ -218,7 +206,7 @@ class FOCUS_Cache {
 	 *
 	 * @return string Status of the object cache dropin.
 	 */
-	public function get_status() {
+	public function get_status(): string {
 		if ( ! $this->object_cache_dropin_exists() ) {
 			return esc_html__( 'Disabled', 'focus-cache' );
 		}
@@ -236,7 +224,7 @@ class FOCUS_Cache {
 	 * @since 0.1.0
 	 * @access public
 	 */
-	public function show_admin_notices() {
+	public function show_admin_notices(): void {
 		// Only show admin notices to users with the right capability.
 		if ( ! $this->is_user_cache_admin() ) {
 			return;
@@ -250,9 +238,11 @@ class FOCUS_Cache {
 				$plugin = get_plugin_data( plugin_dir_path( __FILE__ ) . '/includes/object-cache.php' );
 
 				if ( version_compare( $dropin['Version'], $plugin['Version'], '<' ) ) {
+					// translators: %s is the link to update the plugin dropin.
 					$message = sprintf( __( 'The FOCUS cache drop-in is outdated. Please <a href="%s">update it now</a>.', 'focus-cache' ), esc_url( $url ) );
 				}
 			} else {
+				// translators: %s is the link to update the plugin dropin.
 				$message = sprintf( __( 'Another object cache drop-in was found. To use FOCUS Cache, <a href="%s">please replace it now</a>.', 'focus-cache' ), esc_url( $url ) );
 			}
 
@@ -268,10 +258,10 @@ class FOCUS_Cache {
 	 * @since 0.1.0
 	 * @access public
 	 */
-	public function add_admin_page_notices() {
+	public function add_admin_page_notices(): void {
 		// Show action success/failure messages.
-		if ( isset( $_GET['message'] ) ) { // Input var okay.
-			switch ( $_GET['message'] ) { // Input var okay.
+		if ( isset( $_GET['message'] ) ) { // WPCS: CSRF ok. Input var okay.
+			switch ( $_GET['message'] ) { // WPCS: CSRF ok. Input var okay.
 				case 'cache-enabled':
 					$message = esc_html__( 'Object Cache enabled.', 'focus-cache' );
 					break;
@@ -307,7 +297,7 @@ class FOCUS_Cache {
 	 * @since 0.1.0
 	 * @access public
 	 */
-	public function do_admin_actions() {
+	public function do_admin_actions(): void {
 		if ( ! isset( $_GET['_wpnonce'], $_GET['action'] ) ) { // Input var okay.
 			return;
 		}
@@ -333,15 +323,18 @@ class FOCUS_Cache {
 				switch ( $action ) {
 					case 'enable-cache':
 						$result = $wp_filesystem->copy( plugin_dir_path( __FILE__ ) . '/includes/object-cache.php', WP_CONTENT_DIR . '/object-cache.php', true );
+						wp_cache_flush();
 						$message = $result ? 'cache-enabled' : 'enable-cache-failed';
 						break;
 					case 'disable-cache':
-						$result = $wp_filesystem->delete( WP_CONTENT_DIR . '/object-cache.php' );
+						$result  = $wp_filesystem->delete( WP_CONTENT_DIR . '/object-cache.php' );
 						$message = $result ? 'cache-disabled' : 'disable-cache-failed';
+						wp_cache_flush();
 						break;
 					case 'update-dropin':
-						$result = $wp_filesystem->copy( plugin_dir_path( __FILE__ ) . '/includes/object-cache.php', WP_CONTENT_DIR . '/object-cache.php', true );
+						$result  = $wp_filesystem->copy( plugin_dir_path( __FILE__ ) . '/includes/object-cache.php', WP_CONTENT_DIR . '/object-cache.php', true );
 						$message = $result ? 'dropin-updated' : 'update-dropin-failed';
+						wp_cache_flush();
 						break;
 				}
 			}
@@ -362,14 +355,16 @@ class FOCUS_Cache {
 
 	 * @param string $url The URL to request credentials against.
 	 * @param bool   $silent Whether or not the user form should be displayed.
+	 *
 	 * @return bool False if cannot init, true if can init.
 	 */
-	public function initialize_filesystem( $url, $silent = false ) {
+	public function initialize_filesystem( string $url, bool $silent = false ): bool {
 		if ( $silent ) {
 			ob_start();
 		}
 
-		if ( ( $credentials = request_filesystem_credentials( $url ) ) === false ) {
+		$credentials = request_filesystem_credentials( $url );
+		if ( false === $credentials ) {
 			if ( $silent ) {
 				ob_end_clean();
 			}
@@ -396,12 +391,21 @@ class FOCUS_Cache {
 	 * @since 0.1.0
 	 * @access public
 	 */
-	public function on_deactivation() {
+	public function on_deactivation(): void {
 		if ( $this->validate_object_cache_dropin() && $this->initialize_filesystem( '', true ) ) {
 			global $wp_filesystem;
 			$wp_filesystem->delete( WP_CONTENT_DIR . '/object-cache.php' );
+			wp_cache_flush();
 		}
 	}
-}
 
-new FOCUS_Cache;
+	/**
+	 * Runs when plugin is activated.
+	 *
+	 * @since 1.0.2
+	 * @access public
+	 */
+	public function on_activation(): void {
+		wp_cache_flush();
+	}
+}

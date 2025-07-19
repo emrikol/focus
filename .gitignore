@@ -1,1 +1,5 @@
 node_modules/
+vendor/
+composer.lock
+$WP_TESTS_DIR/
+/.phpunit.cache

@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<ruleset name="VIPServices">
+    <description>VIP Professional Services custom coding standards.</description>
+    <rule ref="./Sniffs/Functions/TypeHintingSniff.php"/>
+    <rule ref="./Sniffs/Functions/TypeDeclarationSniff.php"/>
+    <rule ref="./Sniffs/Namespaces/GlobalNamespaceSniff.php"/>
+</ruleset>

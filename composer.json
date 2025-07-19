@@ -1,0 +1,35 @@
+{
+  "name": "emrikol/focus-object-cache",
+  "description": "File-based Object Cache is Utterly Slow: An Object Caching Dropin for WordPress that uses the local file system.",
+  "homepage": "https://github.com/emrikol/focus",
+  "license": "GPL-3.0-or-later",
+  "authors": [
+    {
+      "name": "Derrick Tennant",
+      "email": "emrikol@gmail.com",
+      "homepage": "https://emrikol.com"
+    }
+  ],
+  "require": {
+    "php": ">=8.0"
+  },
+  "require-dev": {
+    "dealerdirect/phpcodesniffer-composer-installer": "^1.0",
+    "phpcompatibility/phpcompatibility-wp": "^2",
+    "phpunit/phpunit": "^10.0",
+    "wp-coding-standards/wpcs": "^3.0",
+    "wpreadme2markdown/wp2md": "*",
+    "yoast/phpunit-polyfills": "^2.0"
+  },
+  "config": {
+    "allow-plugins": {
+      "dealerdirect/phpcodesniffer-composer-installer": true
+    }
+  },
+  "scripts": {
+    "lint": "phpcs --extensions=php .",
+    "lint:fix": "phpcbf --extensions=php .",
+    "test": "phpunit",
+    "readme": "wp2md convert readme.txt > readme.md"
+  }
+}

@@ -1,10 +1,11 @@
 <?php
-// @codingStandardsIgnoreFile.
 /**
  * Test the persistent object cache using core's cache tests
  * Borrowed from https://github.com/pantheon-systems/wp-redis/blob/e1027dc56b9e2e08541bcd63dcf785cd11d1a2d2/tests/phpunit/test-cache.php
+ *
+ * @package FOCUS
  */
-class CacheTest extends WP_UnitTestCase {
+class TestCacheTest extends WP_UnitTestCase {
 
 	private $cache;
 
@@ -22,7 +23,7 @@ class CacheTest extends WP_UnitTestCase {
 
 	private static $flush_all_key;
 
-	public function setUp() {
+	public function setUp(): void {
 		parent::setUp();
 		// create two cache objects with a shared cache dir
 		// this simulates a typical cache situation, two separate requests interacting
@@ -744,7 +745,7 @@ class CacheTest extends WP_UnitTestCase {
 		$this->assertFalse( wp_cache_get( $fake_key ) );
 	}
 
-	public function tearDown() {
+	public function tearDown(): void {
 		parent::tearDown();
 		$this->flush_cache();
 	}
@@ -752,7 +753,7 @@ class CacheTest extends WP_UnitTestCase {
 	/**
 	 * Remove the object-cache.php from the place we've dropped it
 	 */
-	static function tearDownAfterClass() {
+	public static function tearDownAfterClass(): void {
 		// @codingStandardsIgnoreStart
 		unlink( ABSPATH . 'wp-content/object-cache.php' );
 		// @codingStandardsIgnoreEnd

@@ -27,7 +27,12 @@ if ( ! defined( 'WP_CACHE_KEY_SALT' ) ) {
  * Defines the max expiry age for FOCUS objects.
  */
 if ( ! defined( 'WP_FOCUS_MAXTTL' ) ) {
-	define( 'WP_FOCUS_MAXTTL', YEAR_IN_SECONDS );
+	// Use YEAR_IN_SECONDS if available, otherwise default to one year
+	if ( defined( 'YEAR_IN_SECONDS' ) ) {
+		define( 'WP_FOCUS_MAXTTL', YEAR_IN_SECONDS );
+	} else {
+		define( 'WP_FOCUS_MAXTTL', 365 * 24 * 60 * 60 );
+	}
 }
 
 /**
@@ -403,9 +408,23 @@ class WP_Object_Cache {
 	function __construct() {
 		global $blog_id;
 
+		// Ensure blog_id is set, default to 1 if not available yet
+		if ( ! isset( $blog_id ) || empty( $blog_id ) ) {
+			$blog_id = 1;
+		}
+
 		if ( defined( 'CACHE_PATH' ) ) {
 			$this->cache_dir = CACHE_PATH;
 		} else {
+			// Ensure WP_CONTENT_DIR is defined
+			if ( ! defined( 'WP_CONTENT_DIR' ) ) {
+				if ( defined( 'ABSPATH' ) ) {
+					define( 'WP_CONTENT_DIR', ABSPATH . 'wp-content' );
+				} else {
+					// Fallback for test environment
+					define( 'WP_CONTENT_DIR', '/tmp/wordpress/wp-content' );
+				}
+			}
 			$this->cache_dir = WP_CONTENT_DIR . DIRECTORY_SEPARATOR . 'focus-object-cache' . DIRECTORY_SEPARATOR;
 		}
 
@@ -654,7 +673,7 @@ class WP_Object_Cache {
 			// Stats.
 			if ( $stat ) {
 				$this->group_ops[ $group ][] = 'Hit (Mem): ' . $key;
-				$this->cache_hits++;
+				++$this->cache_hits;
 			}
 
 			$found = true;
@@ -670,7 +689,7 @@ class WP_Object_Cache {
 				// Stats.
 				if ( $stat ) {
 					$this->group_ops[ $group ][] = 'Miss (Expired): ' . $key;
-					$this->cache_misses++;
+					++$this->cache_misses;
 				}
 
 				$found = false;
@@ -682,7 +701,7 @@ class WP_Object_Cache {
 			// Stats.
 			if ( $stat ) {
 				$this->group_ops[ $group ][] = 'Hit (FOCUS): ' . $key;
-				$this->cache_hits++;
+				++$this->cache_hits;
 			}
 
 			if ( is_object( $this->cache[ $group ][ $key ] ) ) {
@@ -696,7 +715,7 @@ class WP_Object_Cache {
 
 		if ( $stat ) {
 			$this->group_ops[ $group ][] = 'Miss (Empty): ' . $key;
-			$this->cache_misses++;
+			++$this->cache_misses;
 		}
 		$found = false;
 		return false;
@@ -1107,7 +1126,7 @@ class WP_Object_Cache {
 			} else {
 				unlink( $dir_path ); // @codingStandardsIgnoreLine
 			}
-			$file_object = readdir( $dir_object )
+			$file_object = readdir( $dir_object );
 		}
 
 		closedir( $dir_object );
