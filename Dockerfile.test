@@ -1,0 +1,32 @@
+# Pre-built test environment image
+FROM php:8.2-cli
+
+# Install system dependencies (this is the slow part we want to cache)
+RUN apt-get update -qq && apt-get install -y -qq \
+    unzip \
+    git \
+    curl \
+    libzip-dev \
+    mariadb-client \
+    subversion \
+    htop \
+    libpng-dev \
+    libjpeg-dev \
+    libfreetype6-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install and configure PHP extensions (also slow)
+RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install mysqli zip gd
+
+# Install Composer
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+
+# Create cache directories
+RUN mkdir -p /cache/composer /cache/wp-tests
+
+# Set working directory
+WORKDIR /app
+
+# Set Composer cache directory
+ENV COMPOSER_CACHE_DIR=/cache/composer

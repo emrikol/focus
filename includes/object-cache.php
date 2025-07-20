@@ -53,6 +53,13 @@ if ( ! defined( 'WP_FOCUS_MAXTTL' ) ) {
  */
 function wp_cache_add( $key, $data, $group = 'default', $expire = 0 ) {
 	global $wp_object_cache;
+	
+	// Skip persistent cache operations during WordPress installation
+	if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) || 
+	     ( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) {
+		return true;
+	}
+	
 	return $wp_object_cache->add( $key, $data, $group, $expire );
 }
 
@@ -103,6 +110,13 @@ function wp_cache_close() {
  */
 function wp_cache_decr( $key, $offset = 1, $group = 'default' ) {
 	global $wp_object_cache;
+	
+	// Skip persistent cache operations during WordPress installation
+	if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) || 
+	     ( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) {
+		return false;
+	}
+	
 	return $wp_object_cache->decr( $key, $offset, $group );
 }
 
@@ -120,6 +134,13 @@ function wp_cache_decr( $key, $offset = 1, $group = 'default' ) {
  */
 function wp_cache_delete( $key, $group = 'default' ) {
 	global $wp_object_cache;
+	
+	// Skip persistent cache operations during WordPress installation
+	if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) || 
+	     ( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) {
+		return true;
+	}
+	
 	return $wp_object_cache->delete( $key, $group );
 }
 
@@ -155,6 +176,18 @@ function wp_cache_flush() {
 }
 
 /**
+ * Flush the object cache's runtime cache.
+ *
+ * @since 0.2.0
+ *
+ * @return bool True on success, false on failure.
+ */
+function wp_cache_flush_runtime() {
+	global $wp_object_cache;
+	return $wp_object_cache->flush_runtime();
+}
+
+/**
  * From WordPress Core: Retrieves the cache contents from the cache by key and group.
  *
  * @since 0.1.0
@@ -170,6 +203,14 @@ function wp_cache_flush() {
  */
 function wp_cache_get( $key, $group = 'default', $force = false, &$found = null ) {
 	global $wp_object_cache;
+	
+	// Skip persistent cache operations during WordPress installation
+	if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) || 
+	     ( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) {
+		$found = false;
+		return false;
+	}
+	
 	return $wp_object_cache->get( $key, $group, $force, $found );
 }
 
@@ -188,6 +229,13 @@ function wp_cache_get( $key, $group = 'default', $force = false, &$found = null 
  */
 function wp_cache_incr( $key, $offset = 1, $group = 'default' ) {
 	global $wp_object_cache;
+	
+	// Skip persistent cache operations during WordPress installation
+	if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) || 
+	     ( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) {
+		return false;
+	}
+	
 	return $wp_object_cache->incr( $key, $offset, $group );
 }
 
@@ -221,6 +269,13 @@ function wp_cache_init() {
  */
 function wp_cache_replace( $key, $data, $group = 'default', $expire = 0 ) {
 	global $wp_object_cache;
+	
+	// Skip persistent cache operations during WordPress installation
+	if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) || 
+	     ( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) {
+		return true;
+	}
+	
 	return $wp_object_cache->replace( $key, $data, $group, $expire );
 }
 
@@ -244,6 +299,13 @@ function wp_cache_replace( $key, $data, $group = 'default', $expire = 0 ) {
  */
 function wp_cache_set( $key, $data, $group = 'default', $expire = 0 ) {
 	global $wp_object_cache;
+	
+	// Skip persistent cache operations during WordPress installation
+	if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) || 
+	     ( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) {
+		return true;
+	}
+	
 	return $wp_object_cache->set( $key, $data, $group, $expire );
 }
 
@@ -354,6 +416,24 @@ class WP_Object_Cache {
 	var $blog_prefix;
 
 	/**
+	 * The global prefix to prepend to keys in global groups.
+	 *
+	 * @since 0.2.0
+	 * @access private
+	 * @var string
+	 */
+	var $global_prefix;
+
+	/**
+	 * Cache key salt for uniqueness.
+	 *
+	 * @since 0.2.0
+	 * @access private
+	 * @var string
+	 */
+	var $key_salt;
+
+	/**
 	 * Directory where cache files are stored.
 	 *
 	 * @since 0.1.0
@@ -387,7 +467,7 @@ class WP_Object_Cache {
 	 * @access private
 	 * @var string
 	 */
-	var $cache_serial_header = '<?php /*';
+	var $cache_serial_header = '<?php exit; /*';
 
 	/**
 	 * Cache file footer.
@@ -428,7 +508,11 @@ class WP_Object_Cache {
 			$this->cache_dir = WP_CONTENT_DIR . DIRECTORY_SEPARATOR . 'focus-object-cache' . DIRECTORY_SEPARATOR;
 		}
 
-		$this->_mkdir( $this->cache_dir );
+		// Skip cache directory creation during WordPress installation
+		if ( ! ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) || 
+		         ( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) ) {
+			$this->_mkdir( $this->cache_dir );
+		}
 
 		$this->_salt_keys( WP_CACHE_KEY_SALT );
 		$this->global_prefix = 'Global';
@@ -468,6 +552,12 @@ class WP_Object_Cache {
 	 * @return bool False if cache key and group already exist, true on success
 	 */
 	public function add( $key, $data, $group = 'default', $expire = 0 ) {
+		// Skip persistent cache operations during WordPress installation
+		if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) || 
+		     ( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) {
+			return true;
+		}
+		
 		if ( wp_suspend_cache_addition() ) {
 			return false;
 		}
@@ -646,6 +736,22 @@ class WP_Object_Cache {
 	}
 
 	/**
+	 * Flush the object cache's runtime cache.
+	 *
+	 * This method only clears the in-memory cache, not the persistent
+	 * file-based cache.
+	 *
+	 * @since 0.2.0
+	 * @access public
+	 *
+	 * @return true Always returns true.
+	 */
+	public function flush_runtime() {
+		$this->cache = array();
+		return true;
+	}
+
+	/**
 	 * Retrieves the cache contents, if it exists.
 	 *
 	 * The contents will be first attempted to be retrieved by searching by the
@@ -665,19 +771,32 @@ class WP_Object_Cache {
 	 * @return bool|mixed False on failure to retrieve contents or the cache contents on success
 	 */
 	public function get( $key, $group = 'default', $force = false, &$found = null, $stat = true ) {
+		// Skip persistent cache operations during WordPress installation
+		if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) || 
+		     ( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) {
+			$found = false;
+			return false;
+		}
+		
 		$group = $this->_sanitize_cache_group( $group );
 		$key   = $this->_key( $key, $group );
 
 		// Memory cache exists, please grab.
 		if ( $this->_isset_internal( $key, $group ) && ! $force ) {
-			// Stats.
-			if ( $stat ) {
-				$this->group_ops[ $group ][] = 'Hit (Mem): ' . $key;
-				++$this->cache_hits;
-			}
+			// Check if the cached file has expired
+			if ( $this->_focus_file_exists( $key, $group ) && $this->_get_expiration( $key, $group ) < 0 ) {
+				// File has expired, remove from memory cache and proceed to load fresh data
+				unset( $this->cache[ $group ][ $key ] );
+			} else {
+				// Stats.
+				if ( $stat ) {
+					$this->group_ops[ $group ][] = 'Hit (Mem): ' . $key;
+					++$this->cache_hits;
+				}
 
-			$found = true;
-			return $this->cache[ $group ][ $key ];
+				$found = true;
+				return $this->cache[ $group ][ $key ];
+			}
 		}
 
 		// FOCUS Cache file exists, please grab.
@@ -696,7 +815,30 @@ class WP_Object_Cache {
 				return false;
 			}
 
-			$this->cache[ $group ][ $key ] = maybe_unserialize( base64_decode( substr( file_get_contents( $this->_get_focus_file( $key, $group ) ), strlen( $this->cache_serial_header ), - strlen( $this->cache_serial_footer ) ) ) ); // @codingStandardsIgnoreLine
+			$file_contents = file_get_contents( $this->_get_focus_file( $key, $group ) ); // @codingStandardsIgnoreLine
+			if ( false === $file_contents ) {
+				$found = false;
+				return false;
+			}
+			
+			$encoded_data = substr( $file_contents, strlen( $this->cache_serial_header ), - strlen( $this->cache_serial_footer ) );
+			$decoded_data = base64_decode( $encoded_data );
+			if ( false === $decoded_data ) {
+				// Corrupted cache file, delete it
+				$this->delete( $key, $group );
+				$found = false;
+				return false;
+			}
+			
+			$unserialized_data = maybe_unserialize( $decoded_data );
+			if ( false === $unserialized_data && $decoded_data !== serialize( false ) ) {
+				// Corrupted cache file, delete it
+				$this->delete( $key, $group );
+				$found = false;
+				return false;
+			}
+			
+			$this->cache[ $group ][ $key ] = $unserialized_data;
 
 			// Stats.
 			if ( $stat ) {
@@ -811,6 +953,12 @@ class WP_Object_Cache {
 	 * @return true Always returns true.
 	 */
 	public function set( $key, $data, $group = 'default', $expire = 0 ) {
+		// Skip persistent cache operations during WordPress installation
+		if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) || 
+		     ( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) {
+			return true;
+		}
+		
 		$group = $this->_sanitize_cache_group( $group );
 		$key   = $this->_key( $key, $group );
 
@@ -1080,9 +1228,15 @@ class WP_Object_Cache {
 	 */
 	protected function _mkdir( $dir ) {
 		// Give the new dirs the same perms as wp-content.
-		$stat       = stat( ABSPATH . 'wp-content' );
-		$dir_perms  = $stat['mode'] & 0007777; // Get the permission bits.
-		$file_perms = $dir_perms & 0000666; // Remove execute bits for files.
+		$stat = stat( ABSPATH . 'wp-content' );
+		if ( false === $stat ) {
+			// Fallback permissions for test environment or when wp-content doesn't exist
+			$dir_perms  = 0755; // rwxr-xr-x
+			$file_perms = 0644; // rw-r--r--
+		} else {
+			$dir_perms  = $stat['mode'] & 0007777; // Get the permission bits.
+			$file_perms = $dir_perms & 0000666; // Remove execute bits for files.
+		}
 
 		// Make the base cache dir.
 		if ( ! file_exists( $dir ) ) {
@@ -1116,6 +1270,7 @@ class WP_Object_Cache {
 		$file_object = readdir( $dir_object );
 		while ( false !== $file_object ) {
 			if ( '.' === $file_object || '..' === $file_object ) {
+				$file_object = readdir( $dir_object );
 				continue;
 			}
 
@@ -1149,6 +1304,7 @@ class WP_Object_Cache {
 		return $group;
 	}
 
+
 	/**
 	 * Serves as a utility function to save the cache data to a file.
 	 *
@@ -1161,6 +1317,11 @@ class WP_Object_Cache {
 	 * @param int        $expire Cache expiration.
 	 */
 	protected function _save( $key, $data, $group = 'default', $expire = 0 ) {
+		// Skip file operations for non-persistent groups
+		if ( ! $this->_should_persist( $group ) ) {
+			return true;
+		}
+
 		$cache_dir = $this->cache_dir;
 
 		if ( 0 === $expire ) {
@@ -1168,13 +1329,19 @@ class WP_Object_Cache {
 		}
 
 		// Give the new dirs the same perms as wp-content.
-		$stat       = stat( ABSPATH . 'wp-content' );
-		$dir_perms  = $stat['mode'] & 0007777; // Get the permission bits.
-		$file_perms = $dir_perms & 0000666; // Remove execute bits for files.
+		$stat = stat( ABSPATH . 'wp-content' );
+		if ( false === $stat ) {
+			// Fallback permissions for test environment or when wp-content doesn't exist
+			$dir_perms  = 0755; // rwxr-xr-x
+			$file_perms = 0644; // rw-r--r--
+		} else {
+			$dir_perms  = $stat['mode'] & 0007777; // Get the permission bits.
+			$file_perms = $dir_perms & 0000666; // Remove execute bits for files.
+		}
 
 		// Make FOCUS Cache directories and temp file.
 		$this->_mkdir( $cache_dir );
-		$group_dir  = $this->_make_group_dir( $group, $dir_perms );
+		$group_dir  = $this->_make_group_dir( $group );
 		$cache_file = $this->_get_focus_file( $key, $group );
 		$temp_file = tempnam( $cache_dir, 'tmp' ); // @codingStandardsIgnoreLine
 		if ( false === $temp_file ) {

@@ -32,6 +32,11 @@ phpcbf --extensions=php . # Auto-fix PHP coding standards issues
 phpunit                  # Run tests directly (requires local setup)
 ```
 
+**IMPORTANT**: Always run `./run-tests.sh` with a timeout to prevent infinite loops:
+```bash
+timeout 300 ./run-tests.sh  # 5 minute timeout
+```
+
 ### Build and Release
 ```bash
 grunt readme             # Convert readme.txt to readme.md

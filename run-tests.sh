@@ -8,6 +8,9 @@ WP_VERSION="trunk"
 DB_CONTAINER_NAME="wp-test-db-$$"
 PHP_CONTAINER_NAME="wp-test-runner-$$"
 DB_VOLUME_NAME="wp-test-db-volume-$$"
+TEST_IMAGE_NAME="focus-test-env"
+COMPOSER_CACHE_VOLUME="focus-composer-cache"
+WP_TESTS_CACHE_VOLUME="focus-wp-tests-cache"
 DB_ROOT_PASSWORD="password"
 DB_NAME="wordpress"
 DB_USER="wordpress"
@@ -222,6 +225,25 @@ check_docker_running() {
   return 0
 }
 
+# Build test image if it doesn't exist
+build_test_image_if_needed() {
+  if ! docker image inspect "$TEST_IMAGE_NAME" >/dev/null 2>&1; then
+    if [ "$DEBUG" = true ]; then
+      echo "🔨 Building cached test environment image (this only happens once)..."
+    fi
+    docker build -t "$TEST_IMAGE_NAME" -f Dockerfile.test . >/dev/null 2>&1
+    if [ "$DEBUG" = true ]; then
+      echo "✅ Test environment image built and cached"
+    fi
+  fi
+}
+
+# Create cache volumes if they don't exist
+create_cache_volumes() {
+  docker volume create "$COMPOSER_CACHE_VOLUME" >/dev/null 2>&1 || true
+  docker volume create "$WP_TESTS_CACHE_VOLUME" >/dev/null 2>&1 || true
+}
+
 # Spinner with countdown timer
 spinner_with_countdown() {
   local max_time="$1"
@@ -373,6 +395,8 @@ if [ "$DEBUG" = true ]; then
 fi
 check_docker_installed
 start_docker_if_needed
+build_test_image_if_needed
+create_cache_volumes
 check_port_available
 
 stop_docker_if_started() {
@@ -776,6 +800,7 @@ if [ "$DEBUG" = true ]; then
       PHPUNIT_EXIT=\$?
     fi
     
+    echo \"\"
     echo \"📋 \$SEPARATOR_LINE\"
     if [ \$PHPUNIT_EXIT -eq 0 ]; then
       echo \"📋 ✅ PHPUnit Tests Complete\"
@@ -851,13 +876,12 @@ else
 
         COLS=\$(tput cols 2>/dev/null || echo 80)
         SEPARATOR_LINE=\$(printf '━%.0s' \$(seq 1 \$COLS))
-        # Clear the spinner line before showing results
-        printf \"\\r\\033[K\"
         echo \"📋 \$SEPARATOR_LINE\"
         echo \"📋 ✅ PHPUnit Test Results\"
         echo \"📋 \$SEPARATOR_LINE\"
-        \$PHPUNIT_CMD \$PHPUNIT_CONFIG \$PHPUNIT_GROUPS \$ARGS
+        \$PHPUNIT_CMD \$PHPUNIT_CONFIG \$PHPUNIT_GROUPS \$ARGS --verbose
         PHPUNIT_EXIT=\$?
+        echo \"\"
         echo \"📋 \$SEPARATOR_LINE\"
         if [ \$PHPUNIT_EXIT -eq 0 ]; then
           echo \"📋 ✅ PHPUnit Tests Complete\"
@@ -870,11 +894,6 @@ else
   } &
   
   docker_pid=$!
-  if ! spinner_with_countdown 600 "! kill -0 $docker_pid 2>/dev/null" "🔧 Setting up test environment"; then
-    wait $docker_pid
-    echo "❌ Test environment setup failed or timed out"
-    exit 1
-  fi
   wait $docker_pid
   exit $?
 fi
