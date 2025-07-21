@@ -143,7 +143,7 @@ class FOCUS_Cache {
 		}
 
 		// show admin page.
-		require_once plugin_dir_path( __FILE__ ) . 'includes/admin-page.php';
+		require_once plugin_dir_path( __FILE__ ) . 'admin-page.php';
 	}
 
 	/**
@@ -189,7 +189,7 @@ class FOCUS_Cache {
 		}
 
 		$dropin = get_plugin_data( WP_CONTENT_DIR . '/object-cache.php' );
-		$plugin = get_plugin_data( plugin_dir_path( __FILE__ ) . '/includes/object-cache.php' );
+		$plugin = get_plugin_data( plugin_dir_path( __FILE__ ) . '/object-cache.php' );
 
 		if ( 0 !== strcmp( $dropin['PluginURI'], $plugin['PluginURI'] ) ) {
 			return false;
@@ -235,7 +235,7 @@ class FOCUS_Cache {
 
 			if ( $this->validate_object_cache_dropin() ) {
 				$dropin = get_plugin_data( WP_CONTENT_DIR . '/object-cache.php' );
-				$plugin = get_plugin_data( plugin_dir_path( __FILE__ ) . '/includes/object-cache.php' );
+				$plugin = get_plugin_data( plugin_dir_path( __FILE__ ) . '/object-cache.php' );
 
 				if ( version_compare( $dropin['Version'], $plugin['Version'], '<' ) ) {
 					// translators: %s is the link to update the plugin dropin.
@@ -322,7 +322,7 @@ class FOCUS_Cache {
 
 				switch ( $action ) {
 					case 'enable-cache':
-						$result = $wp_filesystem->copy( plugin_dir_path( __FILE__ ) . '/includes/object-cache.php', WP_CONTENT_DIR . '/object-cache.php', true );
+						$result = $wp_filesystem->copy( plugin_dir_path( __FILE__ ) . '/object-cache.php', WP_CONTENT_DIR . '/object-cache.php', true );
 						wp_cache_flush();
 						$message = $result ? 'cache-enabled' : 'enable-cache-failed';
 						break;
@@ -332,7 +332,7 @@ class FOCUS_Cache {
 						wp_cache_flush();
 						break;
 					case 'update-dropin':
-						$result  = $wp_filesystem->copy( plugin_dir_path( __FILE__ ) . '/includes/object-cache.php', WP_CONTENT_DIR . '/object-cache.php', true );
+						$result  = $wp_filesystem->copy( plugin_dir_path( __FILE__ ) . '/object-cache.php', WP_CONTENT_DIR . '/object-cache.php', true );
 						$message = $result ? 'dropin-updated' : 'update-dropin-failed';
 						wp_cache_flush();
 						break;
