@@ -1063,4 +1063,305 @@ class Tests_Focus_Cache extends WP_UnitTestCase {
 		$this->assertFalse($fresh_cache->get('del_persist_key1', $group), 'Deleted data should not be retrievable');
 		$this->assertFalse($fresh_cache->get('del_persist_key2', $group), 'Deleted data should not be retrievable');
 	}
+
+	/**
+	 * Helper method to enable preload functionality for testing
+	 * Since WP_FOCUS_CACHE_PRELOAD is already defined as false, we need to temporarily override it
+	 */
+	private function enable_preload_for_testing() {
+		// Use reflection to temporarily change the constant behavior
+		// We'll modify the cache object's behavior directly for testing
+		if ( ! $this->cache->preload_dir ) {
+			// Initialize preload directory if not set
+			$cache_dir = WP_CONTENT_DIR . '/focus-object-cache';
+			$this->cache->preload_dir = $cache_dir . '/preload/';
+			
+			// Create preload directory
+			if ( ! is_dir( $this->cache->preload_dir ) ) {
+				wp_mkdir_p( $this->cache->preload_dir );
+			}
+		}
+		
+		// Set a property to indicate preload is enabled for this test
+		$this->cache->test_preload_enabled = true;
+	}
+
+	/**
+	 * Helper method to check if preload should be enabled for testing
+	 */
+	private function should_test_preload() {
+		return isset( $this->cache->test_preload_enabled ) && $this->cache->test_preload_enabled;
+	}
+
+	/**
+	 * Test cache preload functionality
+	 */
+	public function test_cache_preload_functionality() {
+		// Enable preload for this test
+		$this->enable_preload_for_testing();
+
+		// Simulate GET request context for preload to work
+		$original_request_method = $_SERVER['REQUEST_METHOD'] ?? null;
+		$original_http_host = $_SERVER['HTTP_HOST'] ?? null;
+		$original_request_uri = $_SERVER['REQUEST_URI'] ?? null;
+		
+		$_SERVER['REQUEST_METHOD'] = 'GET';
+		$_SERVER['HTTP_HOST'] = 'example.com';
+		$_SERVER['REQUEST_URI'] = '/test-page';
+
+		$group = 'test_preload';
+		$key1 = 'preload_key1';
+		$key2 = 'preload_key2';
+		$value1 = 'preload_value1';
+		$value2 = 'preload_value2';
+
+		// Add some cache data
+		$this->cache->set($key1, $value1, $group);
+		$this->cache->set($key2, $value2, $group);
+
+		// Verify data is in memory cache
+		$this->assertEquals($value1, $this->cache->get($key1, $group));
+		$this->assertEquals($value2, $this->cache->get($key2, $group));
+
+		// Test preload key generation
+		$preload_key = $this->cache->_get_preload_key();
+		$this->assertNotEmpty($preload_key, 'Preload key should be generated');
+		$this->assertTrue(is_string($preload_key), 'Preload key should be a string');
+
+		// Test preload save
+		$this->cache->save_preload_cache();
+
+		// Verify preload file was created
+		$preload_file = $this->cache->preload_dir . $preload_key . '.php';
+		$this->assertTrue(file_exists($preload_file), 'Preload file should be created');
+
+		// Verify preload file format
+		$preload_contents = file_get_contents($preload_file);
+		$this->assertStringStartsWith('<?php return; /*', $preload_contents, 'Preload file should have security header');
+		$this->assertStringEndsWith('*/ ?>', $preload_contents, 'Preload file should have security footer');
+
+		// Create a new cache instance to test preload loading
+		$fresh_cache = $this->init_cache();
+
+		// Values should be available in the fresh cache instance due to preload
+		$this->assertEquals($value1, $fresh_cache->get($key1, $group), 'Preloaded data should be available');
+		$this->assertEquals($value2, $fresh_cache->get($key2, $group), 'Preloaded data should be available');
+
+		// Restore original server variables
+		if ($original_request_method !== null) {
+			$_SERVER['REQUEST_METHOD'] = $original_request_method;
+		} else {
+			unset($_SERVER['REQUEST_METHOD']);
+		}
+		if ($original_http_host !== null) {
+			$_SERVER['HTTP_HOST'] = $original_http_host;
+		} else {
+			unset($_SERVER['HTTP_HOST']);
+		}
+		if ($original_request_uri !== null) {
+			$_SERVER['REQUEST_URI'] = $original_request_uri;
+		} else {
+			unset($_SERVER['REQUEST_URI']);
+		}
+	}
+
+	/**
+	 * Test that non-persistent groups are excluded from preload
+	 */
+	public function test_preload_excludes_non_persistent_groups() {
+		// Enable preload for this test
+		$this->enable_preload_for_testing();
+
+		// Simulate GET request context for preload to work
+		$original_request_method = $_SERVER['REQUEST_METHOD'] ?? null;
+		$_SERVER['REQUEST_METHOD'] = 'GET';
+
+		$persistent_group = 'test_persistent';
+		$non_persistent_group = 'comment'; // This is in non_persistent_groups by default
+
+		// Verify that comment group is indeed non-persistent
+		$this->assertFalse($this->cache->_should_persist($non_persistent_group), 'Comment group should be non-persistent');
+
+		// Add data to both persistent and non-persistent groups
+		$this->cache->set('persistent_key', 'persistent_value', $persistent_group);
+		$this->cache->set('non_persistent_key', 'non_persistent_value', $non_persistent_group);
+
+		// Save preload
+		$this->cache->save_preload_cache();
+
+		// Create fresh cache instance
+		$fresh_cache = $this->init_cache();
+
+		// Persistent data should be preloaded
+		$this->assertEquals('persistent_value', $fresh_cache->get('persistent_key', $persistent_group), 'Persistent group data should be preloaded');
+		
+		// Non-persistent data should NOT be preloaded (should return false)
+		$this->assertFalse($fresh_cache->get('non_persistent_key', $non_persistent_group), 'Non-persistent group data should NOT be preloaded');
+
+		// Restore original server variables
+		if ($original_request_method !== null) {
+			$_SERVER['REQUEST_METHOD'] = $original_request_method;
+		} else {
+			unset($_SERVER['REQUEST_METHOD']);
+		}
+	}
+
+	/**
+	 * Test preload context filtering - WP-CLI should disable preload
+	 */
+	public function test_preload_disabled_in_wp_cli() {
+		// Enable preload for this test
+		$this->enable_preload_for_testing();
+
+		// Set up proper server context
+		$_SERVER['REQUEST_METHOD'] = 'GET';
+		$_SERVER['HTTP_HOST'] = 'example.com';
+		$_SERVER['REQUEST_URI'] = '/test';
+
+		// First, test that preload works when WP-CLI is false
+		$this->cache->is_wp_cli = false;
+		$preload_key = $this->cache->_get_preload_key();
+		$this->assertNotFalse($preload_key, 'Preload should work when not in WP-CLI context');
+
+		// Now test that preload is disabled when WP-CLI is true
+		$this->cache->is_wp_cli = true;
+		$preload_key = $this->cache->_get_preload_key();
+		$this->assertFalse($preload_key, 'Preload should be disabled in WP-CLI context');
+	}
+
+	/**
+	 * Test preload context filtering - CRON should disable preload
+	 */
+	public function test_preload_disabled_in_cron() {
+		// Enable preload for this test
+		$this->enable_preload_for_testing();
+
+		// Set up proper server context
+		$_SERVER['REQUEST_METHOD'] = 'GET';
+		$_SERVER['HTTP_HOST'] = 'example.com';
+		$_SERVER['REQUEST_URI'] = '/test';
+
+		// First, test that preload works when CRON is false
+		$this->cache->is_doing_cron = false;
+		$preload_key = $this->cache->_get_preload_key();
+		$this->assertNotFalse($preload_key, 'Preload should work when not in CRON context');
+
+		// Now test that preload is disabled when CRON is true
+		$this->cache->is_doing_cron = true;
+		$preload_key = $this->cache->_get_preload_key();
+		$this->assertFalse($preload_key, 'Preload should be disabled in CRON context');
+	}
+
+	/**
+	 * Test preload context filtering - XML-RPC should disable preload
+	 */
+	public function test_preload_disabled_in_xmlrpc() {
+		// Enable preload for this test
+		$this->enable_preload_for_testing();
+
+		// Set up proper server context
+		$_SERVER['REQUEST_METHOD'] = 'GET';
+		$_SERVER['HTTP_HOST'] = 'example.com';
+		$_SERVER['REQUEST_URI'] = '/test';
+
+		// First, test that preload works when XML-RPC is false
+		$this->cache->is_xmlrpc_request = false;
+		$preload_key = $this->cache->_get_preload_key();
+		$this->assertNotFalse($preload_key, 'Preload should work when not in XML-RPC context');
+
+		// Now test that preload is disabled when XML-RPC is true
+		$this->cache->is_xmlrpc_request = true;
+		$preload_key = $this->cache->_get_preload_key();
+		$this->assertFalse($preload_key, 'Preload should be disabled in XML-RPC context');
+	}
+
+	/**
+	 * Test preload context filtering - non-GET HTTP methods should disable preload
+	 */
+	public function test_preload_disabled_for_non_get_requests() {
+		// Enable preload for this test
+		$this->enable_preload_for_testing();
+
+		// Set up proper context (ensure no blocking contexts)
+		$this->cache->is_wp_cli = false;
+		$this->cache->is_doing_cron = false;
+		$this->cache->is_xmlrpc_request = false;
+		$_SERVER['HTTP_HOST'] = 'example.com';
+		$_SERVER['REQUEST_URI'] = '/test';
+
+		$original_request_method = $_SERVER['REQUEST_METHOD'] ?? null;
+
+		// Test various non-GET methods - these should all return false
+		$non_get_methods = ['POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'];
+		
+		foreach ($non_get_methods as $method) {
+			$_SERVER['REQUEST_METHOD'] = $method;
+			
+			$preload_key = $this->cache->_get_preload_key();
+			$this->assertFalse($preload_key, "Preload should be disabled for {$method} requests");
+		}
+
+		// Test that GET works when no blocking contexts are present
+		$_SERVER['REQUEST_METHOD'] = 'GET';
+		
+		$preload_key = $this->cache->_get_preload_key();
+		$this->assertNotFalse($preload_key, 'Preload should work for GET requests');
+		$this->assertNotEmpty($preload_key, 'Preload key should not be empty for GET requests');
+
+		// Restore original server variables
+		if ($original_request_method !== null) {
+			$_SERVER['REQUEST_METHOD'] = $original_request_method;
+		} else {
+			unset($_SERVER['REQUEST_METHOD']);
+		}
+	}
+
+	/**
+	 * Test preload works with different domains (multi-domain support)
+	 */
+	public function test_preload_multi_domain_support() {
+		$this->enable_preload_for_testing();
+
+		// Set up context variables to allow preload
+		$this->cache->is_wp_cli = false;
+		$this->cache->is_doing_cron = false;
+		$this->cache->is_xmlrpc_request = false;
+
+		$original_request_method = $_SERVER['REQUEST_METHOD'] ?? null;
+		$original_http_host = $_SERVER['HTTP_HOST'] ?? null;
+		$original_request_uri = $_SERVER['REQUEST_URI'] ?? null;
+
+		$_SERVER['REQUEST_METHOD'] = 'GET';
+		$_SERVER['REQUEST_URI'] = '/same-page';
+
+		// Test that different domains generate different preload keys
+		$_SERVER['HTTP_HOST'] = 'domain1.com';
+		$key1 = $this->cache->_get_preload_key();
+
+		$_SERVER['HTTP_HOST'] = 'domain2.com';
+		$key2 = $this->cache->_get_preload_key();
+
+		$this->assertNotFalse($key1, 'Domain 1 should generate a valid preload key');
+		$this->assertNotFalse($key2, 'Domain 2 should generate a valid preload key');
+		$this->assertNotEmpty($key1, 'Domain 1 key should not be empty');
+		$this->assertNotEmpty($key2, 'Domain 2 key should not be empty');
+		$this->assertNotEquals($key1, $key2, 'Different domains should generate different preload keys');
+
+		// Restore original server variables
+		if ($original_request_method !== null) {
+			$_SERVER['REQUEST_METHOD'] = $original_request_method;
+		} else {
+			unset($_SERVER['REQUEST_METHOD']);
+		}
+		if ($original_http_host !== null) {
+			$_SERVER['HTTP_HOST'] = $original_http_host;
+		} else {
+			unset($_SERVER['HTTP_HOST']);
+		}
+		if ($original_request_uri !== null) {
+			$_SERVER['REQUEST_URI'] = $original_request_uri;
+		} else {
+			unset($_SERVER['REQUEST_URI']);
+		}
+	}
 }
