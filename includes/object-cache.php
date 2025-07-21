@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 /**
  * Name: FOCUS Object Cache
  * Plugin URI: http://wordpress.org/plugins/focus-object-cache/
@@ -786,7 +787,7 @@ class WP_Object_Cache {
 	 * @param int        $expire Optional. When to expire the cache contents. Default 0 (maximum expiration).
 	 * @return bool False if cache key and group already exist, true on success
 	 */
-	public function add( $key, $data, $group = 'default', $expire = 0 ) {
+	public function add( int|string $key, mixed $data, string $group = 'default', int $expire = 0 ): bool {
 		// Skip persistent cache operations during WordPress installation
 		if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) ||
 			( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash
@@ -824,7 +825,7 @@ class WP_Object_Cache {
 	 *
 	 * @param array $groups List of groups that are global.
 	 */
-	public function add_global_groups( $groups ) {
+	public function add_global_groups( array|string $groups ): void {
 		$groups = (array) $groups;
 
 		// Add and dedupe groups.
@@ -841,7 +842,7 @@ class WP_Object_Cache {
 	 *
 	 * @param array $groups List of groups that are global.
 	 */
-	public function add_non_persistent_groups( $groups ) {
+	public function add_non_persistent_groups( array|string $groups ): void {
 		$groups = (array) $groups;
 
 		// Add and dedupe groups.
@@ -861,7 +862,7 @@ class WP_Object_Cache {
 	 * @param string     $group  Optional. The group the key is in. Default 'default'.
 	 * @return false|int False on failure, the item's new value on success.
 	 */
-	public function decr( $key, $offset = 1, $group = 'default' ) {
+	public function decr( int|string $key, int $offset = 1, string $group = 'default' ): int|false {
 		if ( ! $this->is_valid_key( $key ) ) {
 			return false;
 		}
@@ -913,7 +914,7 @@ class WP_Object_Cache {
 	 * @param string     $group      Optional. Where the cache contents are grouped. Default 'default'.
 	 * @return bool False if the contents weren't deleted and true on success.
 	 */
-	public function delete( $key, $group = 'default' ) {
+	public function delete( int|string $key, string $group = 'default' ): bool {
 		if ( ! $this->is_valid_key( $key ) ) {
 			return false;
 		}
@@ -953,7 +954,7 @@ class WP_Object_Cache {
 	 * @param string $group Optional. Where the cache contents are grouped. Default 'default'.
 	 * @return bool False if not deleted and true on success.
 	 */
-	public function delete_group( $group = false ) {
+	public function delete_group( string|false $group = false ): bool {
 		if ( false === $group ) {
 			return false;
 		}
@@ -986,7 +987,7 @@ class WP_Object_Cache {
 	 *
 	 * @return true Always returns true.
 	 */
-	public function flush() {
+	public function flush(): bool {
 		// Delete all data in cache directory, empty memory cache.
 		$this->rm_cache_dir( $this->cache_dir );
 		$this->cache = array();
@@ -1004,7 +1005,7 @@ class WP_Object_Cache {
 	 *
 	 * @return true Always returns true.
 	 */
-	public function flush_runtime() {
+	public function flush_runtime(): bool {
 		$this->cache = array();
 		return true;
 	}
@@ -1028,7 +1029,7 @@ class WP_Object_Cache {
 	 * @param bool       $stat  Optional. Whether or not to record stats.  Default true.
 	 * @return bool|mixed False on failure to retrieve contents or the cache contents on success
 	 */
-	public function get( $key, $group = 'default', $force = false, &$found = null, $stat = true ) {
+	public function get( int|string $key, string $group = 'default', bool $force = false, ?bool &$found = null, bool $stat = true ): mixed {
 		// Skip persistent cache operations during WordPress installation
 		if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) ||
 			( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash
@@ -1136,7 +1137,7 @@ class WP_Object_Cache {
 	 * @param string     $group  Optional. The group the key is in. Default 'default'.
 	 * @return false|int False on failure, the item's new value on success.
 	 */
-	public function incr( $key, $offset = 1, $group = 'default' ) {
+	public function incr( int|string $key, int $offset = 1, string $group = 'default' ): int|false {
 		if ( ! $this->is_valid_key( $key ) ) {
 			return false;
 		}
@@ -1192,7 +1193,7 @@ class WP_Object_Cache {
 	 * @param int        $expire Optional. When to expire the cache contents. Default 0 (no expiration).
 	 * @return bool False if not exists, true if contents were replaced.
 	 */
-	public function replace( $key, $data, $group = 'default', $expire = 0 ) {
+	public function replace( int|string $key, mixed $data, string $group = 'default', int $expire = 0 ): bool {
 		if ( ! $this->is_valid_key( $key ) ) {
 			return false;
 		}
@@ -1229,7 +1230,7 @@ class WP_Object_Cache {
 	 * @param int        $expire Not Used.
 	 * @return true Always returns true.
 	 */
-	public function set( $key, $data, $group = 'default', $expire = 0 ) {
+	public function set( int|string $key, mixed $data, string $group = 'default', int $expire = 0 ): bool {
 		// Skip persistent cache operations during WordPress installation
 		if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) ||
 			( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash
@@ -1313,7 +1314,7 @@ class WP_Object_Cache {
 	 * @return bool[] Array of return values, grouped by key. Each value is either
 	 *                true on success, or false if cache key and group already exist.
 	 */
-	public function add_multiple( array $data, $group = 'default', $expire = 0 ) {
+	public function add_multiple( array $data, string $group = 'default', int $expire = 0 ): array {
 		if ( empty( $data ) ) {
 			return array();
 		}
@@ -1373,7 +1374,7 @@ class WP_Object_Cache {
 	 * @return bool[] Array of return values, grouped by key. Each value is either
 	 *                true on success, or false on failure.
 	 */
-	public function set_multiple( array $data, $group = 'default', $expire = 0 ) {
+	public function set_multiple( array $data, string $group = 'default', int $expire = 0 ): array {
 		if ( empty( $data ) ) {
 			return array();
 		}
@@ -1427,7 +1428,7 @@ class WP_Object_Cache {
 	 * @return array Array of return values, grouped by key. Each value is either
 	 *               the cache contents on success, or false on failure.
 	 */
-	public function get_multiple( $keys, $group = 'default', $force = false ) {
+	public function get_multiple( array $keys, string $group = 'default', bool $force = false ): array {
 		if ( empty( $keys ) ) {
 			return array();
 		}
@@ -1494,7 +1495,7 @@ class WP_Object_Cache {
 	 * @return bool[] Array of return values, grouped by key. Each value is either
 	 *                true on success, or false if the contents were not deleted.
 	 */
-	public function delete_multiple( array $keys, $group = 'default' ) {
+	public function delete_multiple( array $keys, string $group = 'default' ): array {
 		if ( empty( $keys ) ) {
 			return array();
 		}
@@ -1555,7 +1556,7 @@ class WP_Object_Cache {
 	 * @param string $group Name of group to remove from cache.
 	 * @return bool True if group was flushed, false otherwise.
 	 */
-	public function flush_group( $group ) {
+	public function flush_group( string $group ): bool {
 		return $this->delete_group( $group );
 	}
 
@@ -1567,14 +1568,14 @@ class WP_Object_Cache {
 	 * @since 0.1.0
 	 * @access public
 	 *
-	 * @param int $blog_id Blog ID.
+	 * @param int|false $blog_id Blog ID, or false to do nothing.
+	 *
+	 * @return void
 	 */
-	public function switch_to_blog( $blog_id = false ) {
-		if ( false === $blog_id || (int) $blog_id < 1 || ! is_multisite() ) {
-			return false;
+	public function switch_to_blog( int|false $blog_id = false ): void {
+		if ( false !== $blog_id && (int) $blog_id >= 1 && is_multisite() ) {
+			$this->blog_prefix = 'Site ' . (int) $blog_id;
 		}
-
-		$this->blog_prefix = 'Site ' . (int) $blog_id;
 	}
 
 	/**
@@ -1611,7 +1612,7 @@ class WP_Object_Cache {
 	 * @param string $group Cache group.
 	 * @return bool        true if the group is persistent, false if not.
 	 */
-	public function _should_persist( $group ) {
+	public function _should_persist( string $group ): bool {
 		return empty( $this->non_persistent_groups[ $group ] );
 	}
 
@@ -1777,7 +1778,7 @@ class WP_Object_Cache {
 	 * @param string     $group Cache group for the key check.
 	 * @return string Normalized copy of key.
 	 */
-	public function _key( $key, $group ) {
+	public function _key( int|string $key, string $group ): string {
 		$group = $this->sanitize_cache_group( $group );
 
 		$prefix = $this->key_salt;
@@ -1794,7 +1795,7 @@ class WP_Object_Cache {
 
 		// Remove whitespace.
 		$prefix = preg_replace( '/\s+/', '', $prefix );
-		$key    = preg_replace( '/\s+/', '', $key );
+		$key    = preg_replace( '/\s+/', '', (string) $key );
 
 		$normalized_key = $prefix . ':' . $key;
 
@@ -2357,7 +2358,8 @@ class WP_Object_Cache {
 			return true;
 		}
 
-		return $this->make_group_dir( $group );
+		$this->make_group_dir( $group );
+		return is_dir( $cache_dir );
 	}
 
 	/**

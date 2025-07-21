@@ -1,4 +1,5 @@
 <?php
+declare(strict_types=1);
 
 /**
  * Test FOCUS-specific implementations of core WordPress cache functionality
@@ -66,22 +67,40 @@ class Test_FOCUS_Core_Compatibility extends WP_UnitTestCase {
 			$this->assertTrue( $this->cache->delete( $key ), 'Valid keys should work with delete().' );
 			$this->assertFalse( $this->cache->get( $key ), 'Deleted keys should return false.' );
 		} else {
-			// Invalid keys should be rejected and trigger _doing_it_wrong notices
-			$this->setExpectedIncorrectUsage( 'WP_Object_Cache::add' );
-			$this->setExpectedIncorrectUsage( 'WP_Object_Cache::set' );
-			$this->setExpectedIncorrectUsage( 'WP_Object_Cache::get' );
-			$this->setExpectedIncorrectUsage( 'WP_Object_Cache::delete' );
-			$this->setExpectedIncorrectUsage( 'WP_Object_Cache::replace' );
-			$this->setExpectedIncorrectUsage( 'WP_Object_Cache::incr' );
-			$this->setExpectedIncorrectUsage( 'WP_Object_Cache::decr' );
-			
-			$this->assertFalse( $this->cache->add( $key, $val ), 'FOCUS should reject invalid cache keys in add().' );
-			$this->assertFalse( $this->cache->set( $key, $val ), 'FOCUS should reject invalid cache keys in set().' );
-			$this->assertFalse( $this->cache->get( $key ), 'FOCUS should reject invalid cache keys in get().' );
-			$this->assertFalse( $this->cache->delete( $key ), 'FOCUS should reject invalid cache keys in delete().' );
-			$this->assertFalse( $this->cache->replace( $key, $val ), 'FOCUS should reject invalid cache keys in replace().' );
-			$this->assertFalse( $this->cache->incr( $key ), 'FOCUS should reject invalid cache keys in incr().' );
-			$this->assertFalse( $this->cache->decr( $key ), 'FOCUS should reject invalid cache keys in decr().' );
+			// Check if this is truly a non-int/non-string type (before PHP type juggling)
+			$original_type = gettype( $key );
+			if ( $original_type === 'NULL' ) {
+				// null should throw TypeError due to strict type hinting
+				$this->expectException( TypeError::class );
+				$this->cache->add( $key, $val ); // This will throw TypeError
+			} else {
+				// All other invalid cases (false, float, empty strings, etc.)
+				// With strict types, invalid types should throw TypeError
+				// Valid types with invalid values should trigger _doing_it_wrong
+				
+				if ( ! is_int( $key ) && ! is_string( $key ) ) {
+					// Non-int/non-string types should throw TypeError with strict types
+					$this->expectException( TypeError::class );
+					$this->cache->add( $key, $val ); // This should throw TypeError
+				} else {
+					// Valid types (int/string) with invalid values should be rejected gracefully
+					$this->setExpectedIncorrectUsage( 'WP_Object_Cache::add' );
+					$this->setExpectedIncorrectUsage( 'WP_Object_Cache::set' );
+					$this->setExpectedIncorrectUsage( 'WP_Object_Cache::get' );
+					$this->setExpectedIncorrectUsage( 'WP_Object_Cache::delete' );
+					$this->setExpectedIncorrectUsage( 'WP_Object_Cache::replace' );
+					$this->setExpectedIncorrectUsage( 'WP_Object_Cache::incr' );
+					$this->setExpectedIncorrectUsage( 'WP_Object_Cache::decr' );
+					
+					$this->assertFalse( $this->cache->add( $key, $val ), 'FOCUS should reject invalid cache keys in add().' );
+					$this->assertFalse( $this->cache->set( $key, $val ), 'FOCUS should reject invalid cache keys in set().' );
+					$this->assertFalse( $this->cache->get( $key ), 'FOCUS should reject invalid cache keys in get().' );
+					$this->assertFalse( $this->cache->delete( $key ), 'FOCUS should reject invalid cache keys in delete().' );
+					$this->assertFalse( $this->cache->replace( $key, $val ), 'FOCUS should reject invalid cache keys in replace().' );
+					$this->assertFalse( $this->cache->incr( $key ), 'FOCUS should reject invalid cache keys in incr().' );
+					$this->assertFalse( $this->cache->decr( $key ), 'FOCUS should reject invalid cache keys in decr().' );
+				}
+			}
 		}
 	}
 
