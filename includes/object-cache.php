@@ -657,6 +657,69 @@ class WP_Object_Cache {
 	var $cache_serial_footer = '*/ ?>';
 
 	/**
+	 * File path cache to avoid repeated calculations.
+	 *
+	 * @since 1.0.0
+	 * @access private
+	 * @var array
+	 */
+	var $file_path_cache = array();
+
+	/**
+	 * Expiration cache to avoid repeated filemtime() calls.
+	 *
+	 * @since 1.0.0
+	 * @access private
+	 * @var array
+	 */
+	var $expiration_cache = array();
+
+	/**
+	 * Maximum number of items to keep in file path cache before cleanup.
+	 *
+	 * @since 1.0.0
+	 * @access private
+	 * @var int
+	 */
+	var $max_file_path_cache_items = 1000;
+
+	/**
+	 * Number of items to keep when cleaning up file path cache.
+	 *
+	 * @since 1.0.0
+	 * @access private
+	 * @var int
+	 */
+	var $file_path_cache_cleanup_size = 500;
+
+	/**
+	 * Maximum number of items to keep in expiration cache before cleanup.
+	 *
+	 * @since 1.0.0
+	 * @access private
+	 * @var int
+	 */
+	var $max_expiration_cache_items = 1000;
+
+	/**
+	 * Number of items to keep when cleaning up expiration cache.
+	 *
+	 * @since 1.0.0
+	 * @access private
+	 * @var int
+	 */
+	var $expiration_cache_cleanup_size = 500;
+
+	/**
+	 * Minimum free disk space required before writing cache files (in bytes).
+	 *
+	 * @since 1.0.0
+	 * @access private
+	 * @var int
+	 */
+	var $min_disk_space = 10485760; // 10MB
+
+	/**
 	 * Sets up object properties.
 	 *
 	 * @since 0.1.0
@@ -817,6 +880,14 @@ class WP_Object_Cache {
 			return false;
 		}
 
+		// Get current expiration BEFORE modifying the value to avoid race conditions
+		$current_expiry = $this->_get_expiration( $key, $group );
+		if ( $current_expiry < 0 ) {
+			// Value has expired, delete it and return false
+			$this->delete( $key, $group );
+			return false;
+		}
+
 		// Sanitize value.
 		$this->cache[ $group ][ $key ] = (int) $this->cache[ $group ][ $key ];
 
@@ -829,8 +900,8 @@ class WP_Object_Cache {
 		// Do not let value go negative.
 		$this->cache[ $group ][ $key ] = max( 0, $this->cache[ $group ][ $key ] );
 
-		// Save new value to the cache.
-		$this->set( $key, $this->cache[ $group ][ $key ], $group, $this->_get_expiration( $key, $group ) );
+		// Save new value to the cache with preserved expiration.
+		$this->set( $key, $this->cache[ $group ][ $key ], $group, $current_expiry );
 
 		// Return new value.
 		return $this->cache[ $group ][ $key ];
@@ -869,6 +940,9 @@ class WP_Object_Cache {
 		if ( $this->_focus_file_exists( $key, $group ) ) {
 			unlink( $this->_get_focus_file( $key, $group ) ); // @codingStandardsIgnoreLine
 		}
+
+		// Invalidate expiration cache since we deleted the file
+		$this->_invalidate_expiration_cache( $key, $group );
 
 		// Stats.
 		$this->group_ops[ $group ][] = 'Delete ' . $key;
@@ -1082,6 +1156,14 @@ class WP_Object_Cache {
 			return false;
 		}
 
+		// Get current expiration BEFORE modifying the value to avoid race conditions
+		$current_expiry = $this->_get_expiration( $key, $group );
+		if ( $current_expiry < 0 ) {
+			// Value has expired, delete it and return false
+			$this->delete( $key, $group );
+			return false;
+		}
+
 		// Sanitize value.
 		$this->cache[ $group ][ $key ] = (int) $this->cache[ $group ][ $key ];
 
@@ -1096,8 +1178,7 @@ class WP_Object_Cache {
 			$this->cache[ $group ][ $key ] = 0;
 		}
 
-		// Save new value to the cache.
-		$current_expiry = $this->_get_expiration( $key, $group );
+		// Save new value to the cache with preserved expiration.
 		$this->set( $key, $this->cache[ $group ][ $key ], $group, $current_expiry );
 
 		// Return new value.
@@ -1179,6 +1260,12 @@ class WP_Object_Cache {
 		}
 
 		$this->cache[ $group ][ $key ] = $data;
+
+		// Periodically check memory usage (every 100th set operation)
+		static $set_counter = 0;
+		if ( ++$set_counter % 100 === 0 ) {
+			$this->_maybe_cleanup_memory();
+		}
 
 		// Stats.
 		$this->group_ops[ $group ][] = 'Set ' . $group . '/' . $key . ' (' . $expire . 's)';
@@ -1574,8 +1661,29 @@ class WP_Object_Cache {
 	 * @return int Seconds until the cache expires.
 	 */
 	protected function _get_expiration( $key, $group ) {
+		$cache_key    = $group . ':' . $key;
+		$current_time = time();
+
+		// Check if we have a cached expiration result from this request
+		if ( isset( $this->expiration_cache[ $cache_key ] ) ) {
+			$cached_data = $this->expiration_cache[ $cache_key ];
+			// Use cached result if it's from the same second (transaction-level caching)
+			if ( $current_time === $cached_data['calculated_at'] ) {
+				return ( $cached_data['mtime'] - $current_time );
+			}
+		}
+
 		if ( $this->_focus_file_exists( $key, $group ) ) {
-			return ( filemtime( $this->_get_focus_file( $key, $group ) ) - time() );
+			$file_path = $this->_get_focus_file( $key, $group );
+			$mtime     = filemtime( $file_path );
+
+			// Cache the result for this transaction (same-second requests)
+			$this->expiration_cache[ $cache_key ] = array(
+				'mtime'         => $mtime,
+				'calculated_at' => $current_time,
+			);
+
+			return ( $mtime - $current_time );
 		}
 
 		return 0;
@@ -1592,6 +1700,13 @@ class WP_Object_Cache {
 	 * @return string The cache file.
 	 */
 	protected function _get_focus_file( $key, $group ) {
+		$cache_key = $group . ':' . $key;
+
+		// Check if we already calculated this path
+		if ( isset( $this->file_path_cache[ $cache_key ] ) ) {
+			return $this->file_path_cache[ $cache_key ];
+		}
+
 		// Some characters might cause problems with the file system.
 		$protected_chars = array(
 			'/'  => rawurlencode( '/' ),
@@ -1603,11 +1718,21 @@ class WP_Object_Cache {
 			'\'' => rawurlencode( '\'' ),
 			'<'  => rawurlencode( '<' ),
 			'>'  => rawurlencode( '>' ),
+			':'  => rawurlencode( ':' ),
 		);
 
-		$key = str_replace( array_keys( $protected_chars ), $protected_chars, $key );
+		$safe_key  = str_replace( array_keys( $protected_chars ), $protected_chars, $key );
+		$file_path = $this->cache_dir . $group . '/' . $safe_key . '.php';
 
-		return $this->cache_dir . $group . '/' . $key . '.php';
+		// Cache the result for future use
+		$this->file_path_cache[ $cache_key ] = $file_path;
+
+		// Cleanup file path cache if it gets too large
+		if ( count( $this->file_path_cache ) > $this->max_file_path_cache_items ) {
+			$this->file_path_cache = array_slice( $this->file_path_cache, -$this->file_path_cache_cleanup_size, null, true );
+		}
+
+		return $file_path;
 	}
 
 	/**
@@ -1819,7 +1944,14 @@ class WP_Object_Cache {
 			return true;
 		}
 
-		$cache_dir = $this->cache_dir;
+		// Check available disk space (fail if less than 10MB available)
+		$cache_dir  = $this->cache_dir;
+		$free_bytes = disk_free_space( $cache_dir );
+		if ( $free_bytes !== false && $free_bytes < $this->min_disk_space ) {
+			// Log the issue but don't fail completely - just don't persist to disk
+			error_log( 'FOCUS Cache: Low disk space warning. Available: ' . round( $free_bytes / 1048576, 1 ) . 'MB' );
+			return false;
+		}
 
 		if ( 0 === $expire ) {
 			$expire = $this->default_expiration;
@@ -1876,6 +2008,10 @@ class WP_Object_Cache {
 		if ( false === $touch ) {
 			return false;
 		}
+
+		// Invalidate expiration cache since we just wrote a new file with new expiration
+		$this->_invalidate_expiration_cache( $key, $group );
+
 		return true;
 	}
 
@@ -1949,5 +2085,44 @@ class WP_Object_Cache {
 		}
 
 		return $value;
+	}
+
+	/**
+	 * Invalidates cached expiration data for a specific key.
+	 * Called when we write to a file to ensure expiration cache stays fresh.
+	 *
+	 * @since 1.0.0
+	 * @access protected
+	 *
+	 * @param string $key   The cache key.
+	 * @param string $group The cache group.
+	 */
+	protected function _invalidate_expiration_cache( $key, $group ) {
+		$cache_key = $group . ':' . $key;
+		unset( $this->expiration_cache[ $cache_key ] );
+	}
+
+	/**
+	 * Checks FOCUS-specific cache memory usage and performs cleanup if necessary.
+	 * Only manages FOCUS internal caches, not WordPress core's cache.
+	 *
+	 * @since 1.0.0
+	 * @access protected
+	 */
+	protected function _maybe_cleanup_memory() {
+		// Only cleanup FOCUS-specific auxiliary caches
+		// WordPress core manages $this->cache memory itself
+
+		// Cleanup file path cache if it gets too large
+		if ( count( $this->file_path_cache ) > $this->max_file_path_cache_items ) {
+			$this->file_path_cache = array_slice( $this->file_path_cache, -$this->file_path_cache_cleanup_size, null, true );
+		}
+
+		// Cleanup expiration cache if it gets too large
+		if ( count( $this->expiration_cache ) > $this->max_expiration_cache_items ) {
+			$this->expiration_cache = array_slice( $this->expiration_cache, -$this->expiration_cache_cleanup_size, null, true );
+		}
+
+		// Group operations are preserved for debugging
 	}
 }
