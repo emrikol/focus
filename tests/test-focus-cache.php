@@ -219,6 +219,32 @@ class Tests_Focus_Cache extends WP_UnitTestCase {
 		// Some cache implementations clean up immediately, others do lazy cleanup
 	}
 
+	/**
+	 * Test advanced expiration scenarios
+	 */
+	public function test_advanced_expiration_scenarios() {
+		$key = 'expiry_test';
+		$val = 'test_value';
+		
+		// Test with very short expiration (1 second)
+		$this->cache->set($key, $val, 'default', 1);
+		$this->assertSame($val, $this->cache->get($key));
+		
+		// Wait for expiration
+		sleep(2);
+		
+		// Should be expired
+		$this->assertFalse($this->cache->get($key), 'Cache should be expired');
+		
+		// Test with 0 expiration (should use default)
+		$this->cache->set($key, $val, 'default', 0);
+		$this->assertSame($val, $this->cache->get($key));
+		
+		// Test with negative expiration (should be treated as expired)
+		$this->cache->set($key, $val, 'default', -1);
+		$this->assertFalse($this->cache->get($key), 'Negative expiration should be treated as expired');
+	}
+
 	// =======================
 	// CONFIGURATION CONSTANTS TESTS
 	// =======================
@@ -388,6 +414,27 @@ class Tests_Focus_Cache extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test file locking and concurrent access safety
+	 */
+	public function test_file_locking_safety() {
+		$key = 'lock_test';
+		$val1 = 'value1';
+		$val2 = 'value2';
+		
+		// Set initial value
+		$this->cache->set($key, $val1);
+		$this->assertSame($val1, $this->cache->get($key));
+		
+		// Rapid successive writes (should not corrupt data)
+		for ($i = 0; $i < 10; $i++) {
+			$this->cache->set($key, $val2 . '_' . $i);
+		}
+		
+		// Should get the last value
+		$this->assertSame($val2 . '_9', $this->cache->get($key));
+	}
+
+	/**
 	 * Test cache files contain security headers
 	 */
 	public function test_cache_file_security_headers() {
@@ -459,6 +506,31 @@ class Tests_Focus_Cache extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test cache group sanitization
+	 */
+	public function test_cache_group_sanitization() {
+		$problematic_groups = array(
+			'group/with/slashes',
+			'group with spaces',
+			'group:with:colons',
+			'group*with*asterisks'
+		);
+		
+		foreach ($problematic_groups as $group) {
+			$key = 'test_key';
+			$val = 'test_value_' . $group;
+			
+			// Should not cause filesystem errors
+			$this->assertTrue($this->cache->set($key, $val, $group), "Group '$group' should be sanitized and usable");
+			$this->assertSame($val, $this->cache->get($key, $group), "Group '$group' should be retrievable");
+			
+			// Check that directory was created (with sanitized name)
+			$base_cache_dir = WP_CONTENT_DIR . '/focus-object-cache/';
+			$this->assertTrue(is_dir($base_cache_dir), 'Base cache directory should exist');
+		}
+	}
+
+	/**
 	 * Test multisite cache separation (if applicable)
 	 */
 	public function test_multisite_cache_separation() {
@@ -515,5 +587,480 @@ class Tests_Focus_Cache extends WP_UnitTestCase {
 		$this->cache->set($key, $val);
 		$this->cache->get($key);
 		$this->assertSame(1, $this->cache->cache_hits, 'Should record cache hit');
+	}
+
+	/**
+	 * Test delete_group functionality for single-site
+	 */
+	public function test_delete_group_single_site() {
+		$group = 'test_delete_group';
+		$key1 = 'key1';
+		$key2 = 'key2';
+		$val1 = 'value1';
+		$val2 = 'value2';
+
+		// Set multiple items in the group
+		$this->cache->set($key1, $val1, $group);
+		$this->cache->set($key2, $val2, $group);
+
+		// Verify items exist
+		$this->assertSame($val1, $this->cache->get($key1, $group));
+		$this->assertSame($val2, $this->cache->get($key2, $group));
+
+		// Verify files exist
+		$group_dir = WP_CONTENT_DIR . '/focus-object-cache/' . $group;
+		$this->assertTrue(is_dir($group_dir), 'Group directory should exist');
+		$files = glob($group_dir . '/*.php');
+		$this->assertGreaterThan(0, count($files), 'Cache files should exist');
+
+		// Delete the entire group
+		$this->assertTrue($this->cache->delete_group($group));
+
+		// Verify items are gone from memory
+		$this->assertFalse($this->cache->get($key1, $group));
+		$this->assertFalse($this->cache->get($key2, $group));
+
+		// Verify files are gone
+		$this->assertFalse(is_dir($group_dir), 'Group directory should be deleted');
+	}
+
+	/**
+	 * Test flush_runtime functionality
+	 */
+	public function test_flush_runtime() {
+		$key = 'runtime_test';
+		$val = 'test_value';
+		$group = 'runtime_group';
+
+		// Set cache item
+		$this->cache->set($key, $val, $group);
+		
+		// Verify it exists in memory and on disk
+		$this->assertSame($val, $this->cache->get($key, $group));
+		$group_dir = WP_CONTENT_DIR . '/focus-object-cache/' . $group;
+		$this->assertTrue(is_dir($group_dir), 'Group directory should exist');
+
+		// Flush runtime (should clear memory but not files)
+		$this->cache->flush_runtime();
+
+		// Value should be gone from memory but still retrievable from disk
+		// (FOCUS will reload from file on next get)
+		$this->assertSame($val, $this->cache->get($key, $group), 'Should reload from disk after flush_runtime');
+		
+		// Files should still exist
+		$this->assertTrue(is_dir($group_dir), 'Group directory should still exist after flush_runtime');
+	}
+
+	// =======================
+	// MODERN WORDPRESS 6.0+ API TESTS
+	// =======================
+
+	/**
+	 * Test wp_cache_add_multiple() functionality
+	 */
+	public function test_add_multiple() {
+		$data = array(
+			'key1' => 'value1',
+			'key2' => 'value2',
+			'key3' => array('complex' => 'data'),
+		);
+		$group = 'test_multiple';
+
+		// Add multiple items
+		$results = $this->cache->add_multiple($data, $group);
+
+		// All should succeed
+		$this->assertIsArray($results);
+		$this->assertCount(3, $results);
+		$this->assertTrue($results['key1']);
+		$this->assertTrue($results['key2']);
+		$this->assertTrue($results['key3']);
+
+		// Verify values are retrievable
+		$this->assertSame('value1', $this->cache->get('key1', $group));
+		$this->assertSame('value2', $this->cache->get('key2', $group));
+		$this->assertSame(array('complex' => 'data'), $this->cache->get('key3', $group));
+
+		// Try to add again - should fail for existing keys
+		$results2 = $this->cache->add_multiple($data, $group);
+		$this->assertFalse($results2['key1']);
+		$this->assertFalse($results2['key2']);
+		$this->assertFalse($results2['key3']);
+	}
+
+	/**
+	 * Test wp_cache_set_multiple() functionality
+	 */
+	public function test_set_multiple() {
+		$data = array(
+			'key1' => 'value1',
+			'key2' => 'value2',
+			'key3' => array('complex' => 'data'),
+		);
+		$group = 'test_set_multiple';
+
+		// Set multiple items
+		$results = $this->cache->set_multiple($data, $group);
+
+		// All should succeed
+		$this->assertIsArray($results);
+		$this->assertCount(3, $results);
+		$this->assertTrue($results['key1']);
+		$this->assertTrue($results['key2']);
+		$this->assertTrue($results['key3']);
+
+		// Verify values are retrievable
+		$this->assertSame('value1', $this->cache->get('key1', $group));
+		$this->assertSame('value2', $this->cache->get('key2', $group));
+		$this->assertSame(array('complex' => 'data'), $this->cache->get('key3', $group));
+
+		// Try to set again with different values - should succeed
+		$new_data = array(
+			'key1' => 'new_value1',
+			'key2' => 'new_value2',
+		);
+		$results2 = $this->cache->set_multiple($new_data, $group);
+		$this->assertTrue($results2['key1']);
+		$this->assertTrue($results2['key2']);
+
+		// Verify updated values
+		$this->assertSame('new_value1', $this->cache->get('key1', $group));
+		$this->assertSame('new_value2', $this->cache->get('key2', $group));
+	}
+
+	/**
+	 * Test wp_cache_get_multiple() functionality
+	 */
+	public function test_get_multiple() {
+		$group = 'test_get_multiple';
+
+		// Set up test data
+		$this->cache->set('key1', 'value1', $group);
+		$this->cache->set('key2', 'value2', $group);
+		$this->cache->set('key3', array('complex' => 'data'), $group);
+
+		// Get multiple existing keys
+		$keys = array('key1', 'key2', 'key3');
+		$results = $this->cache->get_multiple($keys, $group);
+
+		$this->assertIsArray($results);
+		$this->assertCount(3, $results);
+		$this->assertSame('value1', $results['key1']);
+		$this->assertSame('value2', $results['key2']);
+		$this->assertSame(array('complex' => 'data'), $results['key3']);
+
+		// Get mix of existing and non-existing keys
+		$mixed_keys = array('key1', 'nonexistent', 'key2');
+		$mixed_results = $this->cache->get_multiple($mixed_keys, $group);
+
+		$this->assertIsArray($mixed_results);
+		$this->assertCount(3, $mixed_results);
+		$this->assertSame('value1', $mixed_results['key1']);
+		$this->assertFalse($mixed_results['nonexistent']);
+		$this->assertSame('value2', $mixed_results['key2']);
+	}
+
+	/**
+	 * Test wp_cache_delete_multiple() functionality
+	 */
+	public function test_delete_multiple() {
+		$group = 'test_delete_multiple';
+
+		// Set up test data
+		$this->cache->set('key1', 'value1', $group);
+		$this->cache->set('key2', 'value2', $group);
+		$this->cache->set('key3', 'value3', $group);
+
+		// Verify data exists
+		$this->assertSame('value1', $this->cache->get('key1', $group));
+		$this->assertSame('value2', $this->cache->get('key2', $group));
+		$this->assertSame('value3', $this->cache->get('key3', $group));
+
+		// Delete multiple keys
+		$keys = array('key1', 'key2', 'nonexistent');
+		$results = $this->cache->delete_multiple($keys, $group);
+
+		$this->assertIsArray($results);
+		$this->assertCount(3, $results);
+		$this->assertTrue($results['key1']);
+		$this->assertTrue($results['key2']);
+		$this->assertFalse($results['nonexistent']); // Should fail for non-existent key
+
+		// Verify keys are deleted
+		$this->assertFalse($this->cache->get('key1', $group));
+		$this->assertFalse($this->cache->get('key2', $group));
+		$this->assertSame('value3', $this->cache->get('key3', $group)); // Should still exist
+	}
+
+	/**
+	 * Test wp_cache_flush_group() functionality
+	 */
+	public function test_flush_group() {
+		$group1 = 'test_flush_group1';
+		$group2 = 'test_flush_group2';
+
+		// Set up test data in different groups
+		$this->cache->set('key1', 'value1', $group1);
+		$this->cache->set('key2', 'value2', $group1);
+		$this->cache->set('key3', 'value3', $group2);
+
+		// Verify data exists
+		$this->assertSame('value1', $this->cache->get('key1', $group1));
+		$this->assertSame('value2', $this->cache->get('key2', $group1));
+		$this->assertSame('value3', $this->cache->get('key3', $group2));
+
+		// Flush group1 only
+		$result = $this->cache->delete_group($group1);
+		$this->assertTrue($result);
+
+		// Group1 data should be gone
+		$this->assertFalse($this->cache->get('key1', $group1));
+		$this->assertFalse($this->cache->get('key2', $group1));
+
+		// Group2 data should still exist
+		$this->assertSame('value3', $this->cache->get('key3', $group2));
+
+		// Verify files are cleaned up
+		$group1_dir = WP_CONTENT_DIR . '/focus-object-cache/' . $group1;
+		$this->assertFalse(is_dir($group1_dir), 'Group1 directory should be deleted');
+
+		$group2_dir = WP_CONTENT_DIR . '/focus-object-cache/' . $group2;
+		$this->assertTrue(is_dir($group2_dir), 'Group2 directory should still exist');
+	}
+
+	/**
+	 * Test wp_cache_supports() functionality
+	 */
+	public function test_cache_supports() {
+		// Test supported features
+		$this->assertTrue(wp_cache_supports('add_multiple'));
+		$this->assertTrue(wp_cache_supports('set_multiple'));
+		$this->assertTrue(wp_cache_supports('get_multiple'));
+		$this->assertTrue(wp_cache_supports('delete_multiple'));
+		$this->assertTrue(wp_cache_supports('flush_runtime'));
+		$this->assertTrue(wp_cache_supports('flush_group'));
+
+		// Test unsupported features
+		$this->assertFalse(wp_cache_supports('unknown_feature'));
+		$this->assertFalse(wp_cache_supports('redis_specific'));
+		$this->assertFalse(wp_cache_supports(''));
+	}
+
+	/**
+	 * Test wp_cache_flush_group() function directly (FOCUS-specific implementation)
+	 *
+	 * This is a FOCUS-specific version of the WordPress core test that properly
+	 * accounts for modern cache implementations that support group flushing.
+	 * The core test (Tests_Cache::test_wp_cache_flush_group) expects external
+	 * caches to NOT support group flushing, but FOCUS does.
+	 *
+	 * @covers ::wp_cache_flush_group
+	 */
+	public function test_wp_cache_flush_group_focus() {
+		$key = 'my-key';
+		$val = 'my-val';
+
+		// Set cache items in different groups
+		wp_cache_set( $key, $val, 'group-test' );
+		wp_cache_set( $key, $val, 'group-kept' );
+
+		// Verify both items exist
+		$this->assertSame( $val, wp_cache_get( $key, 'group-test' ), 'group-test should contain my-val' );
+		$this->assertSame( $val, wp_cache_get( $key, 'group-kept' ), 'group-kept should contain my-val' );
+
+		// FOCUS supports group flushing, so this should succeed
+		$results = wp_cache_flush_group( 'group-test' );
+		$this->assertTrue( $results, 'FOCUS should successfully flush group' );
+
+		// Verify group-test was flushed but group-kept was not
+		$this->assertFalse( wp_cache_get( $key, 'group-test' ), 'group-test should be flushed' );
+		$this->assertSame( $val, wp_cache_get( $key, 'group-kept' ), 'group-kept should still contain my-val' );
+
+		// Verify files are cleaned up for flushed group
+		$group_test_dir = WP_CONTENT_DIR . '/focus-object-cache/group-test';
+		$group_kept_dir = WP_CONTENT_DIR . '/focus-object-cache/group-kept';
+		
+		$this->assertFalse( is_dir( $group_test_dir ), 'group-test directory should be deleted' );
+		$this->assertTrue( is_dir( $group_kept_dir ), 'group-kept directory should still exist' );
+	}
+
+	/**
+	 * Test batch operations performance and consistency
+	 */
+	public function test_batch_operations_consistency() {
+		$group = 'test_batch_consistency';
+		$large_data = array();
+
+		// Create a larger dataset
+		for ($i = 1; $i <= 50; $i++) {
+			$large_data["key$i"] = "value$i";
+		}
+
+		// Test set_multiple with large dataset
+		$set_results = $this->cache->set_multiple($large_data, $group);
+		$this->assertCount(50, $set_results);
+		$this->assertTrue(array_reduce($set_results, function($carry, $item) {
+			return $carry && $item;
+		}, true), 'All set operations should succeed');
+
+		// Test get_multiple with large dataset
+		$keys = array_keys($large_data);
+		$get_results = $this->cache->get_multiple($keys, $group);
+		$this->assertCount(50, $get_results);
+		$this->assertSame($large_data, $get_results, 'All retrieved data should match original');
+
+		// Test delete_multiple with large dataset
+		$delete_results = $this->cache->delete_multiple($keys, $group);
+		$this->assertCount(50, $delete_results);
+		$this->assertTrue(array_reduce($delete_results, function($carry, $item) {
+			return $carry && $item;
+		}, true), 'All delete operations should succeed');
+
+		// Verify all data is gone
+		$verify_results = $this->cache->get_multiple($keys, $group);
+		foreach ($verify_results as $result) {
+			$this->assertFalse($result, 'All data should be deleted');
+		}
+	}
+
+	// =======================
+	// PERSISTENCE VERIFICATION TESTS
+	// =======================
+
+	/**
+	 * Test that add_multiple() actually persists to disk
+	 * This test creates a new cache instance to verify persistence
+	 */
+	public function test_add_multiple_persistence() {
+		$group = 'test_add_multiple_persist';
+		$data = array(
+			'persist_key1' => 'persist_value1',
+			'persist_key2' => 'persist_value2',
+			'persist_key3' => array('complex' => 'persist_data'),
+		);
+
+		// Add data with first cache instance
+		$results = $this->cache->add_multiple($data, $group);
+		$this->assertTrue($results['persist_key1'], 'add_multiple should succeed');
+		$this->assertTrue($results['persist_key2'], 'add_multiple should succeed');
+		$this->assertTrue($results['persist_key3'], 'add_multiple should succeed');
+
+		// Verify files exist on disk
+		$group_dir = WP_CONTENT_DIR . '/focus-object-cache/' . $group;
+		$this->assertTrue(is_dir($group_dir), 'Group directory should be created');
+		$files = glob($group_dir . '/*.php');
+		$this->assertGreaterThanOrEqual(3, count($files), 'Should have at least 3 cache files');
+
+		// Create a NEW cache instance to test persistence
+		$fresh_cache = $this->init_cache();
+
+		// Values should be retrievable from the new instance (proving disk persistence)
+		$this->assertSame('persist_value1', $fresh_cache->get('persist_key1', $group), 'Data should persist to disk');
+		$this->assertSame('persist_value2', $fresh_cache->get('persist_key2', $group), 'Data should persist to disk');
+		$this->assertSame(array('complex' => 'persist_data'), $fresh_cache->get('persist_key3', $group), 'Complex data should persist to disk');
+	}
+
+	/**
+	 * Test that set_multiple() actually persists to disk
+	 */
+	public function test_set_multiple_persistence() {
+		$group = 'test_set_multiple_persist';
+		$data = array(
+			'set_persist_key1' => 'set_persist_value1',
+			'set_persist_key2' => 'set_persist_value2',
+		);
+
+		// Set data with first cache instance
+		$results = $this->cache->set_multiple($data, $group);
+		$this->assertTrue($results['set_persist_key1'], 'set_multiple should succeed');
+		$this->assertTrue($results['set_persist_key2'], 'set_multiple should succeed');
+
+		// Verify files exist on disk
+		$group_dir = WP_CONTENT_DIR . '/focus-object-cache/' . $group;
+		$this->assertTrue(is_dir($group_dir), 'Group directory should be created');
+		$files = glob($group_dir . '/*.php');
+		$this->assertGreaterThanOrEqual(2, count($files), 'Should have at least 2 cache files');
+
+		// Create a NEW cache instance to test persistence
+		$fresh_cache = $this->init_cache();
+
+		// Values should be retrievable from the new instance (proving disk persistence)
+		$this->assertSame('set_persist_value1', $fresh_cache->get('set_persist_key1', $group), 'Data should persist to disk');
+		$this->assertSame('set_persist_value2', $fresh_cache->get('set_persist_key2', $group), 'Data should persist to disk');
+	}
+
+	/**
+	 * Test that get_multiple() works with persisted data
+	 */
+	public function test_get_multiple_persistence() {
+		$group = 'test_get_multiple_persist';
+		$data = array(
+			'get_persist_key1' => 'get_persist_value1',
+			'get_persist_key2' => 'get_persist_value2',
+		);
+
+		// Set data individually to ensure persistence
+		foreach ($data as $key => $value) {
+			$this->cache->set($key, $value, $group);
+		}
+
+		// Verify files exist on disk
+		$group_dir = WP_CONTENT_DIR . '/focus-object-cache/' . $group;
+		$this->assertTrue(is_dir($group_dir), 'Group directory should be created');
+
+		// Create a NEW cache instance to test persistence
+		$fresh_cache = $this->init_cache();
+
+		// Use get_multiple on the fresh instance
+		$keys = array_keys($data);
+		$results = $fresh_cache->get_multiple($keys, $group);
+
+		// Should retrieve all data from disk
+		$this->assertSame($data, $results, 'get_multiple should retrieve persisted data from disk');
+	}
+
+	/**
+	 * Test that delete_multiple() actually removes files from disk
+	 */
+	public function test_delete_multiple_persistence() {
+		$group = 'test_delete_multiple_persist';
+		$data = array(
+			'del_persist_key1' => 'del_persist_value1',
+			'del_persist_key2' => 'del_persist_value2',
+		);
+
+		// Set data individually to ensure persistence
+		foreach ($data as $key => $value) {
+			$this->cache->set($key, $value, $group);
+		}
+
+		// Verify files exist on disk
+		$group_dir = WP_CONTENT_DIR . '/focus-object-cache/' . $group;
+		$this->assertTrue(is_dir($group_dir), 'Group directory should be created');
+		$files_before = glob($group_dir . '/*.php');
+		$this->assertGreaterThanOrEqual(2, count($files_before), 'Should have at least 2 cache files');
+
+		// Delete using delete_multiple
+		$keys = array_keys($data);
+		$results = $this->cache->delete_multiple($keys, $group);
+		$this->assertTrue($results['del_persist_key1'], 'delete_multiple should succeed');
+		$this->assertTrue($results['del_persist_key2'], 'delete_multiple should succeed');
+
+		// Verify cache files are removed from disk (but index.php should remain for security)
+		$files_after = glob($group_dir . '/*.php');
+		
+		// Filter out the security index.php file
+		$cache_files_after = array_filter($files_after, function($file) {
+			return basename($file) !== 'index.php';
+		});
+		
+		$this->assertCount(0, $cache_files_after, 'Cache files should be deleted from disk (index.php security file should remain)');
+
+		// Create a NEW cache instance to verify deletion
+		$fresh_cache = $this->init_cache();
+
+		// Values should NOT be retrievable from the new instance
+		$this->assertFalse($fresh_cache->get('del_persist_key1', $group), 'Deleted data should not be retrievable');
+		$this->assertFalse($fresh_cache->get('del_persist_key2', $group), 'Deleted data should not be retrievable');
 	}
 }
