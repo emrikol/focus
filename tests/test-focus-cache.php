@@ -135,7 +135,7 @@ class Tests_Focus_Cache extends WP_UnitTestCase {
 		
 		// Check for security headers
 		$this->assertStringContainsString('<?php', $content, 'Cache file should have PHP opening tag');
-		$this->assertStringContainsString('exit;', $content, 'Cache file should have exit statement for security');
+		$this->assertStringContainsString('return;', $content, 'Cache file should have return statement for security');
 		
 		// Check for base64 encoded content (FOCUS uses base64 encoding)
 		$this->assertMatchesRegularExpression('/[A-Za-z0-9+\/=]+/', $content, 'Cache file should contain base64 encoded data');
@@ -407,8 +407,8 @@ class Tests_Focus_Cache extends WP_UnitTestCase {
 		// Check for security measures
 		$this->assertStringContainsString('<?php', $content, 'File should start with PHP tag');
 		$this->assertTrue(
-			strpos($content, 'exit') !== false || strpos($content, 'die') !== false,
-			'File should contain exit or die statement'
+			strpos($content, 'return') !== false,
+			'File should contain return statement to prevent execution'
 		);
 		
 		// File should not be directly executable with meaningful output

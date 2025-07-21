@@ -53,13 +53,13 @@ if ( ! defined( 'WP_FOCUS_MAXTTL' ) ) {
  */
 function wp_cache_add( $key, $data, $group = 'default', $expire = 0 ) {
 	global $wp_object_cache;
-	
+
 	// Skip persistent cache operations during WordPress installation
-	if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) || 
-	     ( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) {
+	if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) ||
+		( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) {
 		return true;
 	}
-	
+
 	return $wp_object_cache->add( $key, $data, $group, $expire );
 }
 
@@ -110,13 +110,13 @@ function wp_cache_close() {
  */
 function wp_cache_decr( $key, $offset = 1, $group = 'default' ) {
 	global $wp_object_cache;
-	
+
 	// Skip persistent cache operations during WordPress installation
-	if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) || 
-	     ( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) {
+	if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) ||
+		( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) {
 		return false;
 	}
-	
+
 	return $wp_object_cache->decr( $key, $offset, $group );
 }
 
@@ -134,13 +134,13 @@ function wp_cache_decr( $key, $offset = 1, $group = 'default' ) {
  */
 function wp_cache_delete( $key, $group = 'default' ) {
 	global $wp_object_cache;
-	
+
 	// Skip persistent cache operations during WordPress installation
-	if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) || 
-	     ( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) {
+	if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) ||
+		( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) {
 		return true;
 	}
-	
+
 	return $wp_object_cache->delete( $key, $group );
 }
 
@@ -203,14 +203,14 @@ function wp_cache_flush_runtime() {
  */
 function wp_cache_get( $key, $group = 'default', $force = false, &$found = null ) {
 	global $wp_object_cache;
-	
+
 	// Skip persistent cache operations during WordPress installation
-	if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) || 
-	     ( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) {
+	if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) ||
+		( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) {
 		$found = false;
 		return false;
 	}
-	
+
 	return $wp_object_cache->get( $key, $group, $force, $found );
 }
 
@@ -229,13 +229,13 @@ function wp_cache_get( $key, $group = 'default', $force = false, &$found = null 
  */
 function wp_cache_incr( $key, $offset = 1, $group = 'default' ) {
 	global $wp_object_cache;
-	
+
 	// Skip persistent cache operations during WordPress installation
-	if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) || 
-	     ( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) {
+	if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) ||
+		( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) {
 		return false;
 	}
-	
+
 	return $wp_object_cache->incr( $key, $offset, $group );
 }
 
@@ -269,13 +269,13 @@ function wp_cache_init() {
  */
 function wp_cache_replace( $key, $data, $group = 'default', $expire = 0 ) {
 	global $wp_object_cache;
-	
+
 	// Skip persistent cache operations during WordPress installation
-	if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) || 
-	     ( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) {
+	if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) ||
+		( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) {
 		return true;
 	}
-	
+
 	return $wp_object_cache->replace( $key, $data, $group, $expire );
 }
 
@@ -299,13 +299,13 @@ function wp_cache_replace( $key, $data, $group = 'default', $expire = 0 ) {
  */
 function wp_cache_set( $key, $data, $group = 'default', $expire = 0 ) {
 	global $wp_object_cache;
-	
+
 	// Skip persistent cache operations during WordPress installation
-	if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) || 
-	     ( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) {
+	if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) ||
+		( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) {
 		return true;
 	}
-	
+
 	return $wp_object_cache->set( $key, $data, $group, $expire );
 }
 
@@ -467,7 +467,7 @@ class WP_Object_Cache {
 	 * @access private
 	 * @var string
 	 */
-	var $cache_serial_header = '<?php exit; /*';
+	var $cache_serial_header = '<?php return; /*';
 
 	/**
 	 * Cache file footer.
@@ -509,8 +509,8 @@ class WP_Object_Cache {
 		}
 
 		// Skip cache directory creation during WordPress installation
-		if ( ! ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) || 
-		         ( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) ) {
+		if ( ! ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) ||
+				( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) ) {
 			$this->_mkdir( $this->cache_dir );
 		}
 
@@ -553,12 +553,16 @@ class WP_Object_Cache {
 	 */
 	public function add( $key, $data, $group = 'default', $expire = 0 ) {
 		// Skip persistent cache operations during WordPress installation
-		if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) || 
-		     ( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) {
+		if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) ||
+			( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) {
 			return true;
 		}
-		
+
 		if ( wp_suspend_cache_addition() ) {
+			return false;
+		}
+
+		if ( ! $this->is_valid_key( $key ) ) {
 			return false;
 		}
 
@@ -623,6 +627,10 @@ class WP_Object_Cache {
 	 * @return false|int False on failure, the item's new value on success.
 	 */
 	public function decr( $key, $offset = 1, $group = 'default' ) {
+		if ( ! $this->is_valid_key( $key ) ) {
+			return false;
+		}
+
 		$group = $this->_sanitize_cache_group( $group );
 		$key   = $this->_key( $key, $group );
 
@@ -663,6 +671,10 @@ class WP_Object_Cache {
 	 * @return bool False if the contents weren't deleted and true on success.
 	 */
 	public function delete( $key, $group = 'default' ) {
+		if ( ! $this->is_valid_key( $key ) ) {
+			return false;
+		}
+
 		$group  = $this->_sanitize_cache_group( $group );
 		$key    = $this->_key( $key, $group );
 		$return = true;
@@ -772,12 +784,17 @@ class WP_Object_Cache {
 	 */
 	public function get( $key, $group = 'default', $force = false, &$found = null, $stat = true ) {
 		// Skip persistent cache operations during WordPress installation
-		if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) || 
-		     ( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) {
+		if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) ||
+			( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) {
 			$found = false;
 			return false;
 		}
-		
+
+		if ( ! $this->is_valid_key( $key ) ) {
+			$found = false;
+			return false;
+		}
+
 		$group = $this->_sanitize_cache_group( $group );
 		$key   = $this->_key( $key, $group );
 
@@ -820,7 +837,7 @@ class WP_Object_Cache {
 				$found = false;
 				return false;
 			}
-			
+
 			$encoded_data = substr( $file_contents, strlen( $this->cache_serial_header ), - strlen( $this->cache_serial_footer ) );
 			$decoded_data = base64_decode( $encoded_data );
 			if ( false === $decoded_data ) {
@@ -829,7 +846,7 @@ class WP_Object_Cache {
 				$found = false;
 				return false;
 			}
-			
+
 			$unserialized_data = maybe_unserialize( $decoded_data );
 			if ( false === $unserialized_data && $decoded_data !== serialize( false ) ) {
 				// Corrupted cache file, delete it
@@ -837,7 +854,7 @@ class WP_Object_Cache {
 				$found = false;
 				return false;
 			}
-			
+
 			$this->cache[ $group ][ $key ] = $unserialized_data;
 
 			// Stats.
@@ -875,6 +892,10 @@ class WP_Object_Cache {
 	 * @return false|int False on failure, the item's new value on success.
 	 */
 	public function incr( $key, $offset = 1, $group = 'default' ) {
+		if ( ! $this->is_valid_key( $key ) ) {
+			return false;
+		}
+
 		$group = $this->_sanitize_cache_group( $group );
 		$key   = $this->_key( $key, $group );
 
@@ -920,6 +941,10 @@ class WP_Object_Cache {
 	 * @return bool False if not exists, true if contents were replaced.
 	 */
 	public function replace( $key, $data, $group = 'default', $expire = 0 ) {
+		if ( ! $this->is_valid_key( $key ) ) {
+			return false;
+		}
+
 		$group = $this->_sanitize_cache_group( $group );
 		$key   = $this->_key( $key, $group );
 
@@ -954,11 +979,15 @@ class WP_Object_Cache {
 	 */
 	public function set( $key, $data, $group = 'default', $expire = 0 ) {
 		// Skip persistent cache operations during WordPress installation
-		if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) || 
-		     ( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) {
+		if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) ||
+			( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) {
 			return true;
 		}
-		
+
+		if ( ! $this->is_valid_key( $key ) ) {
+			return false;
+		}
+
 		$group = $this->_sanitize_cache_group( $group );
 		$key   = $this->_key( $key, $group );
 
@@ -1302,6 +1331,37 @@ class WP_Object_Cache {
 			$group = 'default';
 		}
 		return $group;
+	}
+
+	/**
+	 * Determines whether a key is valid.
+	 *
+	 * @since 6.1.0
+	 * @access protected
+	 *
+	 * @param int|string $key Cache key to validate.
+	 * @return bool Whether the key is valid.
+	 */
+	protected function is_valid_key( $key ) {
+		if ( is_int( $key ) ) {
+			return true;
+		}
+
+		if ( is_string( $key ) && '' !== trim( $key ) ) {
+			return true;
+		}
+
+		$type = gettype( $key );
+
+		if ( ! function_exists( '__' ) ) {
+			wp_load_translations_early();
+		}
+
+		/* translators: %s: The type of the given cache key. */
+		$message = sprintf( __( 'Cache key must be integer or non-empty string, %s given.', 'focus' ), $type );
+		_doing_it_wrong( sprintf( '%s::%s', __CLASS__, debug_backtrace( DEBUG_BACKTRACE_IGNORE_ARGS, 2 )[1]['function'] ), esc_html( $message ), '6.1.0' );
+
+		return false;
 	}
 
 

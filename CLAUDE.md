@@ -25,17 +25,108 @@ phpcbf --extensions=php . # Auto-fix PHP coding standards issues
 
 ### Testing
 ```bash
-./run-tests.sh           # Run PHPUnit tests in Docker environment
-./run-tests.sh --debug   # Run tests with verbose output
-./run-tests.sh --multisite # Run multisite-specific tests
-./run-tests.sh --cleanup # Clean up Docker test containers
-phpunit                  # Run tests directly (requires local setup)
+./run-tests.sh                     # Run single-site tests only
+./run-tests.sh --all               # Run ALL tests (single-site + multisite) - RECOMMENDED
+./run-tests.sh --multisite         # Run multisite tests only
+./run-tests.sh --debug             # Run tests with verbose output
+./run-tests.sh --php 8.1           # Test with specific PHP version (8.1, 8.2, etc.)
+./run-tests.sh --wp 6.4            # Test with specific WordPress version
+./run-tests.sh --shell             # Interactive debugging shell
+./run-tests.sh --lint              # Run PHP syntax check only
+./run-tests.sh --cleanup           # Clean up Docker test containers and images
+./run-tests.sh --filter test_cache # Run specific test methods/classes
+phpunit                            # Run tests directly (requires local setup)
 ```
+
+**⚠️ IMPORTANT:** For complete test coverage, always use `./run-tests.sh --all` which runs both single-site and multisite tests sequentially.
+
+#### Test Detail and Debugging Options
+The test runner accepts any PHPUnit flag for detailed output:
+
+```bash
+# Get detailed information about all test results (including skipped tests)
+./run-tests.sh --all --verbose --testdox           # Complete test suite with details
+./run-tests.sh --verbose --testdox                 # Single-site tests with details
+./run-tests.sh --multisite --verbose --testdox     # Multisite tests with details
+
+# Stop on failures for immediate debugging
+./run-tests.sh --all --stop-on-failure --verbose   # Complete suite, stop on first failure
+./run-tests.sh --stop-on-failure --verbose         # Single-site only
+./run-tests.sh --multisite --stop-on-failure --verbose # Multisite only
+
+# List all available tests without running them
+./run-tests.sh --list-tests                        # Single-site tests
+./run-tests.sh --multisite --list-tests            # Multisite tests
+
+# Run specific test groups
+./run-tests.sh --all --group focus --verbose       # All tests in 'focus' group
+./run-tests.sh --group cache --testdox             # Single-site cache tests
+./run-tests.sh --multisite --group cache --testdox # Multisite cache tests
+
+# Maximum detail for troubleshooting (recommended)
+./run-tests.sh --all --verbose --testdox --stop-on-failure      # Complete suite
+./run-tests.sh --verbose --testdox --stop-on-failure            # Single-site
+./run-tests.sh --multisite --verbose --testdox --stop-on-failure # Multisite
+```
+
+**Key flags for detailed test information:**
+- `--verbose`: Shows detailed test output and reasons for skipped tests
+- `--testdox`: Human-readable test names with ✔/↩/❌ icons
+- `--stop-on-failure`: Stops immediately when a test fails
+- `--stop-on-skipped`: Stops immediately when a test is skipped
+- `--coverage-text`: Shows test coverage (requires Xdebug)
 
 **IMPORTANT**: Always run `./run-tests.sh` with a timeout to prevent infinite loops:
 ```bash
 timeout 300 ./run-tests.sh  # 5 minute timeout
 ```
+
+**NOTE**: The test runner now uses cached Docker images and volumes for faster execution (~8.5s vs ~32s). The first time using a new PHP version (e.g., `--php 8.1`) will take longer as it builds the cached image.
+
+#### Multisite Testing
+
+The `--multisite` flag runs tests in a WordPress multisite environment:
+
+- **Single-site mode** (default): Tests run against a standard WordPress installation
+- **Multisite mode** (`--multisite`): Tests run against a WordPress network with multisite enabled
+
+**Key differences when running multisite tests:**
+- WordPress network is installed during setup ("Installing network...")
+- Tests run with `WP_TESTS_MULTISITE=1` constant
+- All object cache functionality is tested in a multisite context
+- Configuration file: `tests/phpunit/multisite.xml`
+
+**Example multisite test combinations:**
+```bash
+./run-tests.sh --multisite --filter test_cache              # Run specific cache tests in multisite
+./run-tests.sh --multisite --filter Test_FOCUS_Multisite    # Run all FOCUS multisite-specific tests
+./run-tests.sh --multisite --debug                          # Debug multisite issues
+./run-tests.sh --multisite --php 8.1                        # Test multisite with PHP 8.1
+```
+
+**Test Coverage Overview:**
+
+**Core Cache Functionality (`tests/test-focus-cache.php`):**
+- File-based storage implementation and directory structure
+- Cache expiration via file modification time
+- Configuration constants (WP_FOCUS_MAXTTL, WP_CACHE_KEY_SALT)
+- Non-persistent groups and security measures
+- FOCUS-specific features and error handling
+
+**WordPress Core Compatibility (`tests/test-focus-core-compat.php`):**
+- Key validation tests (replicating core WordPress tests skipped for external caches)
+- Flush functionality across memory and persistent storage
+- Mixed data type handling (objects, arrays, primitives, null, boolean)
+- Edge cases (whitespace keys, long keys, special characters)
+- Integration with wp_cache_* functions
+
+**Multisite Functionality (`tests/test-focus-multisite.php`):**
+- Blog isolation (cache data separation between sites)
+- Global cache groups (shared data across the network)
+- Cache key prefixing with blog IDs
+- File system organization by blog
+- Multisite-specific operations (increment/decrement, deletion)
+- WordPress default global groups compatibility
 
 ### Build and Release
 ```bash

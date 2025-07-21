@@ -1,5 +1,6 @@
 # Pre-built test environment image
-FROM php:8.2-cli
+ARG PHP_VERSION=8.2
+FROM php:${PHP_VERSION}-cli
 
 # Install system dependencies (this is the slow part we want to cache)
 RUN apt-get update -qq && apt-get install -y -qq \

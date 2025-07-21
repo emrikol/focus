@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+         xsi:noNamespaceSchemaLocation="https://schema.phpunit.de/9.6/phpunit.xsd"
+         bootstrap="../bootstrap.php"
+         backupGlobals="false"
+         colors="true"
+         convertErrorsToExceptions="true"
+         convertNoticesToExceptions="true"
+         convertWarningsToExceptions="true"
+         convertDeprecationsToExceptions="true"
+         cacheResult="false">
+    
+    <!-- Define WP_TESTS_MULTISITE constant for multisite testing -->
+    <php>
+        <const name="WP_TESTS_MULTISITE" value="1"/>
+    </php>
+    
+    <testsuites>
+        <testsuite name="multisite">
+            <directory prefix="test-" suffix=".php">../</directory>
+        </testsuite>
+    </testsuites>
+    
+    <coverage>
+        <include>
+            <directory suffix=".php">../../includes/</directory>
+            <file>../../focus.php</file>
+        </include>
+        <exclude>
+            <directory>../</directory>
+            <directory>../../vendor</directory>
+            <directory>../../node_modules</directory>
+        </exclude>
+    </coverage>
+</phpunit>
