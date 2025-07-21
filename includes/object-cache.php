@@ -1234,13 +1234,50 @@ class WP_Object_Cache {
 	 *                true on success, or false if cache key and group already exist.
 	 */
 	public function add_multiple( array $data, $group = 'default', $expire = 0 ) {
-		$values = array();
-
-		foreach ( $data as $key => $value ) {
-			$values[ $key ] = $this->add( $key, $value, $group, $expire );
+		if ( empty( $data ) ) {
+			return array();
 		}
 
-		return $values;
+		$group         = $this->_sanitize_cache_group( $group );
+		$results       = array();
+		$success_count = 0;
+
+		// Ensure directory exists once (optimization)
+		$this->_ensure_cache_dir_exists( $group );
+
+		// Process all keys in batch
+		foreach ( $data as $key => $value ) {
+			if ( ! $this->is_valid_key( $key ) ) {
+				$results[ $key ] = false;
+				continue;
+			}
+
+			$cache_key = $this->_key( $key, $group );
+
+			// Check if key already exists (add only if it doesn't exist)
+			if ( $this->_isset_internal( $cache_key, $group ) ) {
+				$results[ $key ] = false;
+				continue;
+			}
+
+			// Update memory cache
+			$this->cache[ $group ][ $cache_key ] = $value;
+
+			// Write to disk
+			if ( $this->_save( $cache_key, $value, $group, $expire ) ) {
+				$results[ $key ] = true;
+				++$success_count;
+			} else {
+				$results[ $key ] = false;
+				// Remove from memory if disk write failed
+				unset( $this->cache[ $group ][ $cache_key ] );
+			}
+		}
+
+		// Single group stat entry for the batch operation
+		$this->group_ops[ $group ][] = sprintf( 'add_multiple (%d keys, %d successful)', count( $data ), $success_count );
+
+		return $results;
 	}
 
 	/**
@@ -1257,13 +1294,44 @@ class WP_Object_Cache {
 	 *                true on success, or false on failure.
 	 */
 	public function set_multiple( array $data, $group = 'default', $expire = 0 ) {
-		$values = array();
-
-		foreach ( $data as $key => $value ) {
-			$values[ $key ] = $this->set( $key, $value, $group, $expire );
+		if ( empty( $data ) ) {
+			return array();
 		}
 
-		return $values;
+		$group         = $this->_sanitize_cache_group( $group );
+		$results       = array();
+		$success_count = 0;
+
+		// Ensure directory exists once (optimization)
+		$this->_ensure_cache_dir_exists( $group );
+
+		// Process all keys in batch
+		foreach ( $data as $key => $value ) {
+			if ( ! $this->is_valid_key( $key ) ) {
+				$results[ $key ] = false;
+				continue;
+			}
+
+			$cache_key = $this->_key( $key, $group );
+
+			// Update memory cache
+			$this->cache[ $group ][ $cache_key ] = $value;
+
+			// Write to disk
+			if ( $this->_save( $cache_key, $value, $group, $expire ) ) {
+				$results[ $key ] = true;
+				++$success_count;
+			} else {
+				$results[ $key ] = false;
+				// Remove from memory if disk write failed
+				unset( $this->cache[ $group ][ $cache_key ] );
+			}
+		}
+
+		// Single group stat entry for the batch operation
+		$this->group_ops[ $group ][] = sprintf( 'set_multiple (%d keys, %d successful)', count( $data ), $success_count );
+
+		return $results;
 	}
 
 	/**
@@ -1280,13 +1348,59 @@ class WP_Object_Cache {
 	 *               the cache contents on success, or false on failure.
 	 */
 	public function get_multiple( $keys, $group = 'default', $force = false ) {
-		$values = array();
-
-		foreach ( $keys as $key ) {
-			$values[ $key ] = $this->get( $key, $group, $force );
+		if ( empty( $keys ) ) {
+			return array();
 		}
 
-		return $values;
+		$group        = $this->_sanitize_cache_group( $group );
+		$results      = array();
+		$missing_keys = array();
+		$cache_hits   = 0;
+		$cache_misses = 0;
+
+		// First pass: check memory cache for all keys (fast batch operation)
+		foreach ( $keys as $key ) {
+			if ( ! $this->is_valid_key( $key ) ) {
+				$results[ $key ] = false;
+				++$cache_misses;
+				continue;
+			}
+
+			$cache_key = $this->_key( $key, $group );
+
+			// Check memory first (unless forced)
+			if ( ! $force && $this->_isset_internal( $cache_key, $group ) ) {
+				$results[ $key ] = $this->cache[ $group ][ $cache_key ];
+				++$cache_hits;
+			} else {
+				$missing_keys[ $key ] = $cache_key;
+			}
+		}
+
+		// Second pass: load missing keys from disk in batch
+		if ( ! empty( $missing_keys ) ) {
+			foreach ( $missing_keys as $key => $cache_key ) {
+				$disk_value = $this->_load_from_disk( $cache_key, $group );
+				if ( $disk_value !== false ) {
+					$results[ $key ] = $disk_value;
+					// Update memory cache for future hits
+					$this->cache[ $group ][ $cache_key ] = $disk_value;
+					++$cache_hits;
+				} else {
+					$results[ $key ] = false;
+					++$cache_misses;
+				}
+			}
+		}
+
+		// Update global stats
+		$this->cache_hits   += $cache_hits;
+		$this->cache_misses += $cache_misses;
+
+		// Single group stat entry for the batch operation
+		$this->group_ops[ $group ][] = sprintf( 'get_multiple (%d keys, %d hits, %d misses)', count( $keys ), $cache_hits, $cache_misses );
+
+		return $results;
 	}
 
 	/**
@@ -1301,13 +1415,55 @@ class WP_Object_Cache {
 	 *                true on success, or false if the contents were not deleted.
 	 */
 	public function delete_multiple( array $keys, $group = 'default' ) {
-		$values = array();
-
-		foreach ( $keys as $key ) {
-			$values[ $key ] = $this->delete( $key, $group );
+		if ( empty( $keys ) ) {
+			return array();
 		}
 
-		return $values;
+		$group           = $this->_sanitize_cache_group( $group );
+		$results         = array();
+		$files_to_delete = array();
+		$success_count   = 0;
+
+		// First pass: process all keys and collect files to delete
+		foreach ( $keys as $key ) {
+			if ( ! $this->is_valid_key( $key ) ) {
+				$results[ $key ] = false;
+				continue;
+			}
+
+			$cache_key = $this->_key( $key, $group );
+
+			// Check if key exists in memory or on disk
+			$existed_in_memory = $this->_isset_internal( $cache_key, $group );
+			$file_path         = $this->_get_focus_file( $cache_key, $group );
+			$exists_on_disk    = $this->_focus_file_exists( $cache_key, $group );
+
+			// Remove from memory cache
+			unset( $this->cache[ $group ][ $cache_key ] );
+
+			// Determine success (existed in memory OR on disk)
+			if ( $existed_in_memory || $exists_on_disk ) {
+				$results[ $key ] = true;
+				++$success_count;
+
+				// Collect file for deletion if it exists
+				if ( $exists_on_disk ) {
+					$files_to_delete[] = $file_path;
+				}
+			} else {
+				$results[ $key ] = false;
+			}
+		}
+
+		// Second pass: batch delete files from disk
+		foreach ( $files_to_delete as $file_path ) {
+			unlink( $file_path );
+		}
+
+		// Single group stat entry for the batch operation
+		$this->group_ops[ $group ][] = sprintf( 'delete_multiple (%d keys, %d successful)', count( $keys ), $success_count );
+
+		return $results;
 	}
 
 	/**
@@ -1721,5 +1877,77 @@ class WP_Object_Cache {
 			return false;
 		}
 		return true;
+	}
+
+	/**
+	 * Ensures that a cache directory exists for the given group.
+	 * This is an optimization for batch operations to avoid repeated directory creation.
+	 *
+	 * @since 1.0.0
+	 * @access protected
+	 *
+	 * @param string $group The cache group.
+	 * @return bool True if directory exists or was created, false on failure.
+	 */
+	protected function _ensure_cache_dir_exists( $group ) {
+		$cache_dir = $this->cache_dir . DIRECTORY_SEPARATOR . $group;
+
+		if ( is_dir( $cache_dir ) ) {
+			return true;
+		}
+
+		return $this->_make_group_dir( $group );
+	}
+
+	/**
+	 * Loads a cache value directly from disk without checking memory cache.
+	 * This is used for batch operations to avoid memory cache pollution.
+	 *
+	 * @since 1.0.0
+	 * @access protected
+	 *
+	 * @param string $key   The cache key.
+	 * @param string $group The cache group.
+	 * @return mixed The cached value on success, false on failure.
+	 */
+	protected function _load_from_disk( $key, $group ) {
+		// Check if file exists and hasn't expired
+		if ( ! $this->_focus_file_exists( $key, $group ) ) {
+			return false;
+		}
+
+		$cache_file = $this->_get_focus_file( $key, $group );
+
+		// Check expiration (negative value means expired)
+		if ( $this->_get_expiration( $key, $group ) < 0 ) {
+			// File has expired, delete it
+			unlink( $cache_file );
+			return false;
+		}
+
+		// Load and decode the data
+		$contents = file_get_contents( $cache_file );
+		if ( false === $contents ) {
+			return false;
+		}
+
+		// Extract data from the PHP file format
+		$data = substr( $contents, strlen( $this->cache_serial_header ), - strlen( $this->cache_serial_footer ) );
+		if ( empty( $data ) ) {
+			return false;
+		}
+
+		// Decode the data
+		$data = base64_decode( $data );
+		if ( false === $data ) {
+			return false;
+		}
+
+		$value = unserialize( $data );
+		if ( false === $value && serialize( false ) !== $data ) {
+			return false;
+		}
+
+		return $value;
 	}
 }
