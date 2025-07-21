@@ -84,7 +84,7 @@ class FOCUS_Cache {
 	 *
 	 * @since 0.1.0
 	 * @access public
-	 * 
+	 *
 	 * @return bool True if the user can manage the cache, false otherwise.
 	 */
 	public function is_user_cache_admin(): bool {
@@ -104,7 +104,7 @@ class FOCUS_Cache {
 	 *
 	 * @since 0.1.0
 	 * @access public
-	 * 
+	 *
 	 * @return int The maximum TTL in seconds.
 	 */
 	public function get_focus_maxttl(): int {
@@ -116,10 +116,10 @@ class FOCUS_Cache {
 	 *
 	 * @since 0.1.0
 	 * @access public
-	 * 
+	 *
 	 * @return string The cache key prefix.
 	 */
-	public function get_focus_cachekey_prefix(): string{
+	public function get_focus_cachekey_prefix(): string {
 		return defined( 'WP_CACHE_KEY_SALT' ) ? WP_CACHE_KEY_SALT : '';
 	}
 

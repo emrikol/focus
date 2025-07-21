@@ -11,9 +11,11 @@
 
 	<!-- Ignoring Files and Folders:
 		https://github.com/squizlabs/PHP_CodeSniffer/wiki/Advanced-Usage#ignoring-files-and-folders -->
-	<exclude-pattern>./tests/</exclude-pattern>
-	<exclude-pattern>./vendor/</exclude-pattern>
-	<exclude-pattern>./phpcs/</exclude-pattern>
+	<exclude-pattern>/tests/</exclude-pattern>
+	<exclude-pattern>/vendor/</exclude-pattern>
+	<exclude-pattern>/phpcs/</exclude-pattern>
+	<exclude-pattern>/\.phpunit.cache/</exclude-pattern>
+	<exclude-pattern>/\$WP_TESTS_DIR/</exclude-pattern>
 
 	<!-- How to scan -->
 	<arg value="sp"/> <!-- Show sniff and progress -->

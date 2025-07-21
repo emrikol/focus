@@ -1090,17 +1090,16 @@ class WP_Object_Cache {
 				return false;
 			}
 
-			$encoded_data = substr( $file_contents, strlen( $this->cache_serial_header ), - strlen( $this->cache_serial_footer ) );
-			$decoded_data = base64_decode( $encoded_data );
-			if ( false === $decoded_data ) {
+			$serialized_data = substr( $file_contents, strlen( $this->cache_serial_header ), - strlen( $this->cache_serial_footer ) );
+			if ( empty( $serialized_data ) ) {
 				// Corrupted cache file, delete it
 				$this->delete( $key, $group );
 				$found = false;
 				return false;
 			}
 
-			$unserialized_data = maybe_unserialize( $decoded_data );
-			if ( false === $unserialized_data && $decoded_data !== serialize( false ) ) {
+			$unserialized_data = maybe_unserialize( $serialized_data );
+			if ( false === $unserialized_data && $serialized_data !== serialize( false ) ) {
 				// Corrupted cache file, delete it
 				$this->delete( $key, $group );
 				$found = false;
@@ -1977,9 +1976,9 @@ class WP_Object_Cache {
 			return false;
 		}
 
-		// Serialize, Base64 Encode, and add Header/Footer.
+		// Serialize and add Header/Footer.
 		// `maybe_serialize()` causes issues with variable typing, can't use.
-		$serial = $this->cache_serial_header . base64_encode( serialize( $data ) ) . $this->cache_serial_footer; // @codingStandardsIgnoreLine
+		$serial = $this->cache_serial_header . serialize( $data ) . $this->cache_serial_footer; // @codingStandardsIgnoreLine
 
 		$fd = fopen( $temp_file, 'w' );
 		if ( false === $fd ) {
@@ -2067,18 +2066,13 @@ class WP_Object_Cache {
 			return false;
 		}
 
-		// Extract data from the PHP file format
+		// Extract serialized data from the PHP file format
 		$data = substr( $contents, strlen( $this->cache_serial_header ), - strlen( $this->cache_serial_footer ) );
 		if ( empty( $data ) ) {
 			return false;
 		}
 
-		// Decode the data
-		$data = base64_decode( $data );
-		if ( false === $data ) {
-			return false;
-		}
-
+		// Unserialize the data
 		$value = unserialize( $data );
 		if ( false === $value && serialize( false ) !== $data ) {
 			return false;
