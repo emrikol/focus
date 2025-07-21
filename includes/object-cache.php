@@ -505,7 +505,7 @@ class WP_Object_Cache {
 	 * @access private
 	 * @var int
 	 */
-	var $group_ops = array();
+	public array $group_ops = array();
 
 	/**
 	 * Holds the cached objects.
@@ -514,7 +514,7 @@ class WP_Object_Cache {
 	 * @access private
 	 * @var array
 	 */
-	var $cache = array();
+	public array $cache = array();
 
 	/**
 	 * List of global cache groups.
@@ -523,7 +523,7 @@ class WP_Object_Cache {
 	 * @access protected
 	 * @var array
 	 */
-	var $global_groups = array();
+	public array $global_groups = array();
 
 	/**
 	 * Groups that should not be stored in persistent cache.
@@ -532,7 +532,7 @@ class WP_Object_Cache {
 	 * @access private
 	 * @var array
 	 */
-	var $non_persistent_groups = array( 'comment' => true );
+	public array $non_persistent_groups = array( 'comment' => true );
 
 	/**
 	 * The blog prefix to prepend to keys in non-global groups.
@@ -541,7 +541,7 @@ class WP_Object_Cache {
 	 * @access private
 	 * @var int
 	 */
-	var $blog_prefix;
+	public string $blog_prefix;
 
 	/**
 	 * The global prefix to prepend to keys in global groups.
@@ -550,7 +550,7 @@ class WP_Object_Cache {
 	 * @access private
 	 * @var string
 	 */
-	var $global_prefix;
+	public string $global_prefix;
 
 	/**
 	 * Cache key salt for uniqueness.
@@ -559,7 +559,7 @@ class WP_Object_Cache {
 	 * @access private
 	 * @var string
 	 */
-	var $key_salt;
+	public string $key_salt;
 
 	/**
 	 * Directory where cache files are stored.
@@ -568,7 +568,7 @@ class WP_Object_Cache {
 	 * @access private
 	 * @var string
 	 */
-	var $cache_dir;
+	public string $cache_dir;
 
 	/**
 	 * Directory for cache preload files.
@@ -577,7 +577,7 @@ class WP_Object_Cache {
 	 * @access private
 	 * @var string
 	 */
-	var $preload_dir;
+	public string $preload_dir;
 
 	/**
 	 * Test mode flag for preload functionality.
@@ -586,18 +586,34 @@ class WP_Object_Cache {
 	 * @access private
 	 * @var bool
 	 */
-	var $test_preload_enabled = false;
+	public bool $test_preload_enabled = false;
 
 	/**
-	 * Context flags for preload filtering (testable alternatives to constants).
+	 * Used to detect if script is running via WP-CLI.
 	 *
 	 * @since 1.1.0
 	 * @access private
 	 * @var bool
 	 */
-	var $is_wp_cli         = null;
-	var $is_doing_cron     = null;
-	var $is_xmlrpc_request = null;
+	public ?bool $is_wp_cli = null;
+
+	/**
+	 * Used to detect if script is running via WordPress cron.
+	 *
+	 * @since 1.1.0
+	 * @access private
+	 * @var bool
+	 */
+	public ?bool $is_doing_cron = null;
+
+	/**
+	 * Used to detect if script is running via XML-RPC.
+	 *
+	 * @since 1.1.0
+	 * @access private
+	 * @var bool
+	 */
+	public ?bool $is_xmlrpc_request = null;
 
 	/**
 	 * Secret to use for a hash salt.
@@ -606,7 +622,7 @@ class WP_Object_Cache {
 	 * @access private
 	 * @var string
 	 */
-	var $secret = '';
+	public string $secret = '';
 
 	/**
 	 * Default maximum cache expiry.
@@ -624,7 +640,7 @@ class WP_Object_Cache {
 	 * @access private
 	 * @var string
 	 */
-	var $cache_serial_header = '<?php return; /*';
+	public string $cache_serial_header = '<?php return; /*';
 
 	/**
 	 * Cache file footer.
@@ -633,7 +649,7 @@ class WP_Object_Cache {
 	 * @access private
 	 * @var string
 	 */
-	var $cache_serial_footer = '*/ ?>';
+	public string $cache_serial_footer = '*/ ?>';
 
 	/**
 	 * File path cache to avoid repeated calculations.
@@ -642,7 +658,7 @@ class WP_Object_Cache {
 	 * @access private
 	 * @var array
 	 */
-	var $file_path_cache = array();
+	public array $file_path_cache = array();
 
 	/**
 	 * Expiration cache to avoid repeated filemtime() calls.
@@ -651,7 +667,7 @@ class WP_Object_Cache {
 	 * @access private
 	 * @var array
 	 */
-	var $expiration_cache = array();
+	public array $expiration_cache = array();
 
 	/**
 	 * Maximum number of items to keep in file path cache before cleanup.
@@ -660,7 +676,7 @@ class WP_Object_Cache {
 	 * @access private
 	 * @var int
 	 */
-	var $max_file_path_cache_items = 1000;
+	public int $max_file_path_cache_items = 1000;
 
 	/**
 	 * Number of items to keep when cleaning up file path cache.
@@ -669,7 +685,7 @@ class WP_Object_Cache {
 	 * @access private
 	 * @var int
 	 */
-	var $file_path_cache_cleanup_size = 500;
+	public int $file_path_cache_cleanup_size = 500;
 
 	/**
 	 * Maximum number of items to keep in expiration cache before cleanup.
@@ -678,7 +694,7 @@ class WP_Object_Cache {
 	 * @access private
 	 * @var int
 	 */
-	var $max_expiration_cache_items = 1000;
+	public int $max_expiration_cache_items = 1000;
 
 	/**
 	 * Number of items to keep when cleaning up expiration cache.
@@ -687,7 +703,7 @@ class WP_Object_Cache {
 	 * @access private
 	 * @var int
 	 */
-	var $expiration_cache_cleanup_size = 500;
+	public int $expiration_cache_cleanup_size = 500;
 
 	/**
 	 * Minimum free disk space required before writing cache files (in bytes).
@@ -696,7 +712,7 @@ class WP_Object_Cache {
 	 * @access private
 	 * @var int
 	 */
-	var $min_disk_space = 10485760; // 10MB
+	public int $min_disk_space = 10485760; // 10MB.
 
 	/**
 	 * Sets up object properties.
@@ -705,10 +721,10 @@ class WP_Object_Cache {
 	 *
 	 * @global int $blog_id Global blog ID.
 	 */
-	function __construct() {
+	public function __construct() {
 		global $blog_id;
 
-		// Ensure blog_id is set, default to 1 if not available yet
+		// Ensure blog_id is set, default to 1 if not available yet.
 		if ( ! isset( $blog_id ) || empty( $blog_id ) ) {
 			$blog_id = 1;
 		}
@@ -716,33 +732,33 @@ class WP_Object_Cache {
 		if ( defined( 'CACHE_PATH' ) ) {
 			$this->cache_dir = CACHE_PATH;
 		} else {
-			// Ensure WP_CONTENT_DIR is defined
+			// Ensure WP_CONTENT_DIR is defined.
 			if ( ! defined( 'WP_CONTENT_DIR' ) ) {
 				if ( defined( 'ABSPATH' ) ) {
 					define( 'WP_CONTENT_DIR', ABSPATH . 'wp-content' );
 				} else {
-					// Fallback for test environment
+					// Fallback for test environment.
 					define( 'WP_CONTENT_DIR', '/tmp/wordpress/wp-content' );
 				}
 			}
 			$this->cache_dir = WP_CONTENT_DIR . DIRECTORY_SEPARATOR . 'focus-object-cache' . DIRECTORY_SEPARATOR;
 		}
 
-		// Set up preload directory
+		// Set up preload directory.
 		$this->preload_dir = $this->cache_dir . 'preload' . DIRECTORY_SEPARATOR;
 
-		// Skip cache directory creation during WordPress installation
+		// Skip cache directory creation during WordPress installation.
 		if ( ! ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) ||
-				( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) ) {
+				( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 			$this->mkdir( $this->cache_dir );
 
-			// Create preload directory if preload is enabled
+			// Create preload directory if preload is enabled.
 			if ( WP_FOCUS_CACHE_PRELOAD ) {
 				$this->mkdir( $this->preload_dir );
 			}
 		}
 
-		$this->_salt_keys( WP_CACHE_KEY_SALT );
+		$this->salt_keys( WP_CACHE_KEY_SALT );
 		$this->global_prefix = 'Global';
 		$this->blog_prefix   = 'WP';
 
@@ -750,11 +766,11 @@ class WP_Object_Cache {
 			$this->blog_prefix = 'Site ' . $blog_id;
 		}
 
-		// Load preload cache if enabled and available
+		// Load preload cache if enabled and available.
 		if ( WP_FOCUS_CACHE_PRELOAD || ( isset( $this->test_preload_enabled ) && $this->test_preload_enabled ) ) {
-			$this->_load_preload_cache();
+			$this->load_preload_cache();
 
-			// Register shutdown hook to save preload cache
+			// Register shutdown hook to save preload cache.
 			register_shutdown_function( array( $this, 'save_preload_cache' ) );
 		}
 	}
@@ -766,10 +782,10 @@ class WP_Object_Cache {
 	 *
 	 * @since 0.1.8
 	 *
-	 * @return true Always returns true.
+	 * @return void
 	 */
 	public function __destruct() {
-		return true;
+		// Destructor method - no action needed.
 	}
 
 	/**
@@ -778,7 +794,7 @@ class WP_Object_Cache {
 	 * @since 0.1.0
 	 * @access public
 	 *
-	 * @uses WP_Object_Cache::_isset_internal() Checks to see if the cache already has data.
+	 * @uses WP_Object_Cache::isset_internal() Checks to see if the cache already has data.
 	 * @uses WP_Object_Cache::set()             Sets the data after the checking the cache contents existence.
 	 *
 	 * @param int|string $key    What to call the contents in the cache.
@@ -788,7 +804,7 @@ class WP_Object_Cache {
 	 * @return bool False if cache key and group already exist, true on success
 	 */
 	public function add( int|string $key, mixed $data, string $group = 'default', int $expire = 0 ): bool {
-		// Skip persistent cache operations during WordPress installation
+		// Skip persistent cache operations during WordPress installation.
 		if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) ||
 			( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash
 			return true;
@@ -803,9 +819,9 @@ class WP_Object_Cache {
 		}
 
 		$group = $this->sanitize_cache_group( $group );
-		$key   = $this->_key( $key, $group );
+		$key   = $this->key( $key, $group );
 
-		if ( $this->_isset_internal( $key, $group ) ) {
+		if ( $this->isset_internal( $key, $group ) ) {
 			return false;
 		}
 
@@ -848,7 +864,7 @@ class WP_Object_Cache {
 		// Add and dedupe groups.
 		$groups                      = array_fill_keys( $groups, true );
 		$this->non_persistent_groups = array_merge( $this->non_persistent_groups, $groups );
-		// No need for array_unique since array_merge already handles duplicates for associative arrays
+		// No need for array_unique since array_merge already handles duplicates for associative arrays.
 	}
 
 	/**
@@ -868,17 +884,17 @@ class WP_Object_Cache {
 		}
 
 		$group = $this->sanitize_cache_group( $group );
-		$key   = $this->_key( $key, $group );
+		$key   = $this->key( $key, $group );
 
 		// Key/Group doesn't exist, return false.
-		if ( ! $this->_isset_internal( $key, $group ) ) {
+		if ( ! $this->isset_internal( $key, $group ) ) {
 			return false;
 		}
 
-		// Get current expiration BEFORE modifying the value to avoid race conditions
-		$current_expiry = $this->_get_expiration( $key, $group );
+		// Get current expiration BEFORE modifying the value to avoid race conditions.
+		$current_expiry = $this->get_expiration( $key, $group );
 		if ( $current_expiry < 0 ) {
-			// Value has expired, delete it and return false
+			// Value has expired, delete it and return false.
 			$this->delete( $key, $group );
 			return false;
 		}
@@ -920,23 +936,23 @@ class WP_Object_Cache {
 		}
 
 		$group  = $this->sanitize_cache_group( $group );
-		$key    = $this->_key( $key, $group );
+		$key    = $this->key( $key, $group );
 		$return = true;
 
 		// Key/Group doesn't exist, return false.
-		if ( ! $this->_isset_internal( $key, $group ) ) {
+		if ( ! $this->isset_internal( $key, $group ) ) {
 			$return = false;
 		}
 
 		// Delete cached item and return true.
 		unset( $this->cache[ $group ][ $key ] );
 
-		// Delet the cache file.
-		if ( $this->_focus_file_exists( $key, $group ) ) {
-			unlink( $this->_get_focus_file( $key, $group ) );
+		// Delete the cache file.
+		if ( $this->focus_file_exists( $key, $group ) ) {
+			unlink( $this->get_focus_file( $key, $group ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink
 		}
 
-		// Invalidate expiration cache since we deleted the file
+		// Invalidate expiration cache since we deleted the file.
 		$this->invalidate_expiration_cache( $key, $group );
 
 		// Stats.
@@ -959,7 +975,7 @@ class WP_Object_Cache {
 			return false;
 		}
 
-		if ( ! $this->_should_persist( $group ) && ! isset( $this->cache[ $group ] ) ) {
+		if ( ! $this->should_persist( $group ) && ! isset( $this->cache[ $group ] ) ) {
 			return false;
 		}
 
@@ -969,11 +985,11 @@ class WP_Object_Cache {
 		// Mark all files as expired, just in case delete times out.
 		foreach ( glob( $this->cache_dir . $group . '/*.*' ) as $filename ) {
 			if ( is_file( $filename ) ) {
-				touch( $filename, time() - 3600 );
+				touch( $filename, time() - 3600 ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_touch
 			}
 		}
 
-		// Delet the cache group dir.
+		// Delete the cache group dir.
 		$this->rm_cache_dir( $this->cache_dir . $group );
 
 		return true;
@@ -1030,7 +1046,7 @@ class WP_Object_Cache {
 	 * @return bool|mixed False on failure to retrieve contents or the cache contents on success
 	 */
 	public function get( int|string $key, string $group = 'default', bool $force = false, ?bool &$found = null, bool $stat = true ): mixed {
-		// Skip persistent cache operations during WordPress installation
+		// Skip persistent cache operations during WordPress installation.
 		if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) ||
 			( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash
 			$found = false;
@@ -1043,13 +1059,13 @@ class WP_Object_Cache {
 		}
 
 		$group = $this->sanitize_cache_group( $group );
-		$key   = $this->_key( $key, $group );
+		$key   = $this->key( $key, $group );
 
 		// Memory cache exists, please grab.
-		if ( $this->_isset_internal( $key, $group ) && ! $force ) {
-			// Check if the cached file has expired
-			if ( $this->_focus_file_exists( $key, $group ) && $this->_get_expiration( $key, $group ) < 0 ) {
-				// File has expired, remove from memory cache and proceed to load fresh data
+		if ( $this->isset_internal( $key, $group ) && ! $force ) {
+			// Check if the cached file has expired.
+			if ( $this->focus_file_exists( $key, $group ) && $this->get_expiration( $key, $group ) < 0 ) {
+				// File has expired, remove from memory cache and proceed to load fresh data.
 				unset( $this->cache[ $group ][ $key ] );
 			} else {
 				// Stats.
@@ -1064,9 +1080,9 @@ class WP_Object_Cache {
 		}
 
 		// FOCUS Cache file exists, please grab.
-		if ( $this->_focus_file_exists( $key, $group ) ) {
+		if ( $this->focus_file_exists( $key, $group ) ) {
 			// If the object has expired, remove it from the cache and return false to force a refresh.
-			if ( $this->_get_expiration( $key, $group ) < 0 ) {
+			if ( $this->get_expiration( $key, $group ) < 0 ) {
 				$this->delete( $key, $group );
 
 				// Stats.
@@ -1079,7 +1095,7 @@ class WP_Object_Cache {
 				return false;
 			}
 
-			$file_contents = file_get_contents( $this->_get_focus_file( $key, $group ) );
+			$file_contents = file_get_contents( $this->get_focus_file( $key, $group ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 			if ( false === $file_contents ) {
 				$found = false;
 				return false;
@@ -1087,7 +1103,7 @@ class WP_Object_Cache {
 
 			$serialized_data = substr( $file_contents, strlen( $this->cache_serial_header ), - strlen( $this->cache_serial_footer ) );
 			if ( empty( $serialized_data ) ) {
-				// Corrupted cache file, delete it
+				// Corrupted cache file, delete it.
 				$this->delete( $key, $group );
 				$found = false;
 				return false;
@@ -1095,7 +1111,7 @@ class WP_Object_Cache {
 
 			$unserialized_data = maybe_unserialize( $serialized_data );
 			if ( false === $unserialized_data && $serialized_data !== serialize( false ) ) {
-				// Corrupted cache file, delete it
+				// Corrupted cache file, delete it.
 				$this->delete( $key, $group );
 				$found = false;
 				return false;
@@ -1143,17 +1159,17 @@ class WP_Object_Cache {
 		}
 
 		$group = $this->sanitize_cache_group( $group );
-		$key   = $this->_key( $key, $group );
+		$key   = $this->key( $key, $group );
 
 		// Key/Group doesn't exist, return false.
-		if ( ! $this->_isset_internal( $key, $group ) ) {
+		if ( ! $this->isset_internal( $key, $group ) ) {
 			return false;
 		}
 
-		// Get current expiration BEFORE modifying the value to avoid race conditions
-		$current_expiry = $this->_get_expiration( $key, $group );
+		// Get current expiration BEFORE modifying the value to avoid race conditions.
+		$current_expiry = $this->get_expiration( $key, $group );
 		if ( $current_expiry < 0 ) {
-			// Value has expired, delete it and return false
+			// Value has expired, delete it and return false.
 			$this->delete( $key, $group );
 			return false;
 		}
@@ -1199,10 +1215,10 @@ class WP_Object_Cache {
 		}
 
 		$group = $this->sanitize_cache_group( $group );
-		$key   = $this->_key( $key, $group );
+		$key   = $this->key( $key, $group );
 
 		// Key/Group doesn't exist, return false.
-		if ( ! $this->_isset_internal( $key, $group ) ) {
+		if ( ! $this->isset_internal( $key, $group ) ) {
 			return false;
 		}
 
@@ -1231,7 +1247,7 @@ class WP_Object_Cache {
 	 * @return true Always returns true.
 	 */
 	public function set( int|string $key, mixed $data, string $group = 'default', int $expire = 0 ): bool {
-		// Skip persistent cache operations during WordPress installation
+		// Skip persistent cache operations during WordPress installation.
 		if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) ||
 			( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash
 			return true;
@@ -1242,7 +1258,7 @@ class WP_Object_Cache {
 		}
 
 		$group = $this->sanitize_cache_group( $group );
-		$key   = $this->_key( $key, $group );
+		$key   = $this->key( $key, $group );
 
 		if ( 0 === $expire ) {
 			$expire = $this->default_expiration;
@@ -1255,7 +1271,7 @@ class WP_Object_Cache {
 
 		$this->cache[ $group ][ $key ] = $data;
 
-		// Periodically check memory usage (every 100th set operation)
+		// Periodically check memory usage (every 100th set operation).
 		static $set_counter = 0;
 		if ( ++$set_counter % 100 === 0 ) {
 			$this->maybe_cleanup_memory();
@@ -1293,7 +1309,7 @@ class WP_Object_Cache {
 				<?php
 				$lines = array();
 				foreach ( $ops as $op ) {
-					echo wp_kses_post( $this->_colorize_debug_line( $op ) . '<br/>' );
+					echo wp_kses_post( $this->colorize_debug_line( $op ) . '<br/>' );
 				}
 				?>
 			</div>
@@ -1323,39 +1339,39 @@ class WP_Object_Cache {
 		$results       = array();
 		$success_count = 0;
 
-		// Ensure directory exists once (optimization)
+		// Ensure directory exists once (optimization).
 		$this->ensure_cache_dir_exists( $group );
 
-		// Process all keys in batch
+		// Process all keys in batch.
 		foreach ( $data as $key => $value ) {
 			if ( ! $this->is_valid_key( $key ) ) {
 				$results[ $key ] = false;
 				continue;
 			}
 
-			$cache_key = $this->_key( $key, $group );
+			$cache_key = $this->key( $key, $group );
 
-			// Check if key already exists (add only if it doesn't exist)
-			if ( $this->_isset_internal( $cache_key, $group ) ) {
+			// Check if key already exists (add only if it doesn't exist).
+			if ( $this->isset_internal( $cache_key, $group ) ) {
 				$results[ $key ] = false;
 				continue;
 			}
 
-			// Update memory cache
+			// Update memory cache.
 			$this->cache[ $group ][ $cache_key ] = $value;
 
-			// Write to disk
+			// Write to disk.
 			if ( $this->save( $cache_key, $value, $group, $expire ) ) {
 				$results[ $key ] = true;
 				++$success_count;
 			} else {
 				$results[ $key ] = false;
-				// Remove from memory if disk write failed
+				// Remove from memory if disk write failed.
 				unset( $this->cache[ $group ][ $cache_key ] );
 			}
 		}
 
-		// Single group stat entry for the batch operation
+		// Single group stat entry for the batch operation.
 		$this->group_ops[ $group ][] = sprintf( 'add_multiple (%d keys, %d successful)', count( $data ), $success_count );
 
 		return $results;
@@ -1383,33 +1399,33 @@ class WP_Object_Cache {
 		$results       = array();
 		$success_count = 0;
 
-		// Ensure directory exists once (optimization)
+		// Ensure directory exists once (optimization).
 		$this->ensure_cache_dir_exists( $group );
 
-		// Process all keys in batch
+		// Process all keys in batch.
 		foreach ( $data as $key => $value ) {
 			if ( ! $this->is_valid_key( $key ) ) {
 				$results[ $key ] = false;
 				continue;
 			}
 
-			$cache_key = $this->_key( $key, $group );
+			$cache_key = $this->key( $key, $group );
 
-			// Update memory cache
+			// Update memory cache.
 			$this->cache[ $group ][ $cache_key ] = $value;
 
-			// Write to disk
+			// Write to disk.
 			if ( $this->save( $cache_key, $value, $group, $expire ) ) {
 				$results[ $key ] = true;
 				++$success_count;
 			} else {
 				$results[ $key ] = false;
-				// Remove from memory if disk write failed
+				// Remove from memory if disk write failed.
 				unset( $this->cache[ $group ][ $cache_key ] );
 			}
 		}
 
-		// Single group stat entry for the batch operation
+		// Single group stat entry for the batch operation.
 		$this->group_ops[ $group ][] = sprintf( 'set_multiple (%d keys, %d successful)', count( $data ), $success_count );
 
 		return $results;
@@ -1439,7 +1455,7 @@ class WP_Object_Cache {
 		$cache_hits   = 0;
 		$cache_misses = 0;
 
-		// First pass: check memory cache for all keys (fast batch operation)
+		// First pass: check memory cache for all keys (fast batch operation).
 		foreach ( $keys as $key ) {
 			if ( ! $this->is_valid_key( $key ) ) {
 				$results[ $key ] = false;
@@ -1447,10 +1463,10 @@ class WP_Object_Cache {
 				continue;
 			}
 
-			$cache_key = $this->_key( $key, $group );
+			$cache_key = $this->key( $key, $group );
 
-			// Check memory first (unless forced)
-			if ( ! $force && $this->_isset_internal( $cache_key, $group ) ) {
+			// Check memory first (unless forced).
+			if ( ! $force && $this->isset_internal( $cache_key, $group ) ) {
 				$results[ $key ] = $this->cache[ $group ][ $cache_key ];
 				++$cache_hits;
 			} else {
@@ -1458,13 +1474,13 @@ class WP_Object_Cache {
 			}
 		}
 
-		// Second pass: load missing keys from disk in batch
+		// Second pass: load missing keys from disk in batch.
 		if ( ! empty( $missing_keys ) ) {
 			foreach ( $missing_keys as $key => $cache_key ) {
 				$disk_value = $this->load_from_disk( $cache_key, $group );
 				if ( $disk_value !== false ) {
 					$results[ $key ] = $disk_value;
-					// Update memory cache for future hits
+					// Update memory cache for future hits.
 					$this->cache[ $group ][ $cache_key ] = $disk_value;
 					++$cache_hits;
 				} else {
@@ -1474,11 +1490,11 @@ class WP_Object_Cache {
 			}
 		}
 
-		// Update global stats
+		// Update global stats.
 		$this->cache_hits   += $cache_hits;
 		$this->cache_misses += $cache_misses;
 
-		// Single group stat entry for the batch operation
+		// Single group stat entry for the batch operation.
 		$this->group_ops[ $group ][] = sprintf( 'get_multiple (%d keys, %d hits, %d misses)', count( $keys ), $cache_hits, $cache_misses );
 
 		return $results;
@@ -1505,29 +1521,29 @@ class WP_Object_Cache {
 		$files_to_delete = array();
 		$success_count   = 0;
 
-		// First pass: process all keys and collect files to delete
+		// First pass: process all keys and collect files to delete.
 		foreach ( $keys as $key ) {
 			if ( ! $this->is_valid_key( $key ) ) {
 				$results[ $key ] = false;
 				continue;
 			}
 
-			$cache_key = $this->_key( $key, $group );
+			$cache_key = $this->key( $key, $group );
 
-			// Check if key exists in memory or on disk
-			$existed_in_memory = $this->_isset_internal( $cache_key, $group );
-			$file_path         = $this->_get_focus_file( $cache_key, $group );
-			$exists_on_disk    = $this->_focus_file_exists( $cache_key, $group );
+			// Check if key exists in memory or on disk.
+			$existed_in_memory = $this->isset_internal( $cache_key, $group );
+			$file_path         = $this->get_focus_file( $cache_key, $group );
+			$exists_on_disk    = $this->focus_file_exists( $cache_key, $group );
 
-			// Remove from memory cache
+			// Remove from memory cache.
 			unset( $this->cache[ $group ][ $cache_key ] );
 
-			// Determine success (existed in memory OR on disk)
+			// Determine success (existed in memory OR on disk).
 			if ( $existed_in_memory || $exists_on_disk ) {
 				$results[ $key ] = true;
 				++$success_count;
 
-				// Collect file for deletion if it exists
+				// Collect file for deletion if it exists.
 				if ( $exists_on_disk ) {
 					$files_to_delete[] = $file_path;
 				}
@@ -1536,12 +1552,12 @@ class WP_Object_Cache {
 			}
 		}
 
-		// Second pass: batch delete files from disk
+		// Second pass: batch delete files from disk.
 		foreach ( $files_to_delete as $file_path ) {
-			unlink( $file_path );
+			unlink( $file_path ); // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink
 		}
 
-		// Single group stat entry for the batch operation
+		// Single group stat entry for the batch operation.
 		$this->group_ops[ $group ][] = sprintf( 'delete_multiple (%d keys, %d successful)', count( $keys ), $success_count );
 
 		return $results;
@@ -1587,7 +1603,7 @@ class WP_Object_Cache {
 	 * @param string $line Stats to be colorized.
 	 * @return string HTML colorized stats.
 	 */
-	protected function _colorize_debug_line( $line ) {
+	protected function colorize_debug_line( string $line ): string {
 		$colors = array(
 			'Get'    => 'green',
 			'Set'    => 'purple',
@@ -1612,7 +1628,7 @@ class WP_Object_Cache {
 	 * @param string $group Cache group.
 	 * @return bool        true if the group is persistent, false if not.
 	 */
-	public function _should_persist( string $group ): bool {
+	public function should_persist( string $group ): bool {
 		return empty( $this->non_persistent_groups[ $group ] );
 	}
 
@@ -1665,7 +1681,7 @@ class WP_Object_Cache {
 	 * @param string     $group Cache group for the key existence check.
 	 * @return bool Whether the key exists in the cache for the given group.
 	 */
-	protected function _isset_internal( $key, $group ) {
+	protected function isset_internal( $key, $group ) {
 		return isset( $this->cache[ $group ] ) && ( isset( $this->cache[ $group ][ $key ] ) || array_key_exists( $key, $this->cache[ $group ] ) );
 	}
 
@@ -1679,8 +1695,8 @@ class WP_Object_Cache {
 	 * @param string     $group Cache group for the key existence check.
 	 * @return bool Whether the cache file key exists.
 	 */
-	protected function _focus_file_exists( $key, $group ) {
-		return file_exists( $this->_get_focus_file( $key, $group ) );
+	protected function focus_file_exists( $key, $group ) {
+		return file_exists( $this->get_focus_file( $key, $group ) );
 	}
 
 	/**
@@ -1693,24 +1709,24 @@ class WP_Object_Cache {
 	 * @param string     $group Cache group for the key check.
 	 * @return int Seconds until the cache expires.
 	 */
-	protected function _get_expiration( $key, $group ) {
+	protected function get_expiration( $key, $group ) {
 		$cache_key    = $group . ':' . $key;
 		$current_time = time();
 
-		// Check if we have a cached expiration result from this request
+		// Check if we have a cached expiration result from this request.
 		if ( isset( $this->expiration_cache[ $cache_key ] ) ) {
 			$cached_data = $this->expiration_cache[ $cache_key ];
-			// Use cached result if it's from the same second (transaction-level caching)
+			// Use cached result if it's from the same second (transaction-level caching).
 			if ( $current_time === $cached_data['calculated_at'] ) {
 				return ( $cached_data['mtime'] - $current_time );
 			}
 		}
 
-		if ( $this->_focus_file_exists( $key, $group ) ) {
-			$file_path = $this->_get_focus_file( $key, $group );
+		if ( $this->focus_file_exists( $key, $group ) ) {
+			$file_path = $this->get_focus_file( $key, $group );
 			$mtime     = filemtime( $file_path );
 
-			// Cache the result for this transaction (same-second requests)
+			// Cache the result for this transaction (same-second requests).
 			$this->expiration_cache[ $cache_key ] = array(
 				'mtime'         => $mtime,
 				'calculated_at' => $current_time,
@@ -1732,10 +1748,10 @@ class WP_Object_Cache {
 	 * @param string     $group Cache group for the key check.
 	 * @return string The cache file.
 	 */
-	protected function _get_focus_file( $key, $group ) {
+	protected function get_focus_file( $key, $group ) {
 		$cache_key = $group . ':' . $key;
 
-		// Check if we already calculated this path
+		// Check if we already calculated this path.
 		if ( isset( $this->file_path_cache[ $cache_key ] ) ) {
 			return $this->file_path_cache[ $cache_key ];
 		}
@@ -1757,10 +1773,10 @@ class WP_Object_Cache {
 		$safe_key  = str_replace( array_keys( $protected_chars ), $protected_chars, $key );
 		$file_path = $this->cache_dir . $group . '/' . $safe_key . '.php';
 
-		// Cache the result for future use
+		// Cache the result for future use.
 		$this->file_path_cache[ $cache_key ] = $file_path;
 
-		// Cleanup file path cache if it gets too large
+		// Cleanup file path cache if it gets too large.
 		if ( count( $this->file_path_cache ) > $this->max_file_path_cache_items ) {
 			$this->file_path_cache = array_slice( $this->file_path_cache, -$this->file_path_cache_cleanup_size, null, true );
 		}
@@ -1778,7 +1794,7 @@ class WP_Object_Cache {
 	 * @param string     $group Cache group for the key check.
 	 * @return string Normalized copy of key.
 	 */
-	public function _key( int|string $key, string $group ): string {
+	public function key( int|string $key, string $group ): string {
 		$group = $this->sanitize_cache_group( $group );
 
 		$prefix = $this->key_salt;
@@ -1813,7 +1829,7 @@ class WP_Object_Cache {
 	 *
 	 * @param string $key_salt Salt to use.
 	 */
-	protected function _salt_keys( $key_salt ) {
+	protected function salt_keys( $key_salt ) {
 		if ( strlen( $key_salt ) ) {
 			$this->key_salt = $key_salt . ':';
 		} else {
@@ -1830,61 +1846,61 @@ class WP_Object_Cache {
 	 *
 	 * @return string Normalized preload cache key including domain and blog context.
 	 */
-	public function _get_preload_key() {
-		// Skip if preload is not enabled
+	public function get_preload_key() {
+		// Skip if preload is not enabled.
 		if ( ! WP_FOCUS_CACHE_PRELOAD && ! ( isset( $this->test_preload_enabled ) && $this->test_preload_enabled ) ) {
 			return false;
 		}
 
 		global $blog_id;
 
-		// Skip preload for non-web contexts
+		// Skip preload for non-web contexts.
 		if ( $this->is_wp_cli() ) {
-			return false; // Disable preload for WP-CLI
+			return false; // Disable preload for WP-CLI.
 		}
 		if ( $this->is_doing_cron() ) {
-			return false; // Disable preload for cron jobs
+			return false; // Disable preload for cron jobs.
 		}
 		if ( $this->is_xmlrpc_request() ) {
-			return false; // Disable preload for XML-RPC requests
+			return false; // Disable preload for XML-RPC requests.
 		}
 
-		// Skip preload for non-GET requests
-		$request_method = isset( $_SERVER['REQUEST_METHOD'] ) ? $_SERVER['REQUEST_METHOD'] : 'GET';
+		// Skip preload for non-GET requests.
+		$request_method = isset( $_SERVER['REQUEST_METHOD'] ) ? $_SERVER['REQUEST_METHOD'] : 'GET'; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 		if ( 'GET' !== $request_method ) {
-			return false; // Only preload GET requests
+			return false; // Only preload GET requests.
 		}
 
-		// Get domain for multi-domain WordPress sites
-		$domain      = isset( $_SERVER['HTTP_HOST'] ) ? $_SERVER['HTTP_HOST'] : 'localhost';
+		// Get domain for multi-domain WordPress sites.
+		$domain      = isset( $_SERVER['HTTP_HOST'] ) ? $_SERVER['HTTP_HOST'] : 'localhost'; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 		$domain_hash = md5( $domain );
 
-		// Get current URL and normalize it
+		// Get current URL and normalize it.
 		$url = '';
 		if ( isset( $_SERVER['REQUEST_URI'] ) ) {
-			$url = $_SERVER['REQUEST_URI'];
+			$url = $_SERVER['REQUEST_URI']; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 		}
 
-		// Remove trailing slash for consistency
+		// Remove trailing slash for consistency.
 		$url = rtrim( $url, '/' );
 
-		// Handle query parameters - sort them for consistency
+		// Handle query parameters - sort them for consistency.
 		$query_params = array();
 		if ( isset( $_SERVER['QUERY_STRING'] ) && ! empty( $_SERVER['QUERY_STRING'] ) ) {
-			parse_str( $_SERVER['QUERY_STRING'], $query_params );
+			parse_str( $_SERVER['QUERY_STRING'], $query_params ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 			ksort( $query_params );
 		}
 
-		// Build normalized URL with sorted query string
+		// Build normalized URL with sorted query string.
 		$normalized_url = $url;
 		if ( ! empty( $query_params ) ) {
 			$normalized_url .= '?' . http_build_query( $query_params );
 		}
 
-		// Create hash for the URL to avoid filesystem issues
+		// Create hash for the URL to avoid filesystem issues.
 		$url_hash = md5( $normalized_url );
 
-		// Include domain and blog ID for multisite and multi-domain support
+		// Include domain and blog ID for multisite and multi-domain support.
 		$blog_id     = isset( $blog_id ) ? $blog_id : 1;
 		$preload_key = $domain_hash . '_' . $url_hash . '_' . $blog_id;
 
@@ -1898,64 +1914,64 @@ class WP_Object_Cache {
 	 * @since 1.1.0
 	 * @access protected
 	 */
-	protected function _load_preload_cache() {
-		// Skip during WordPress installation
+	protected function load_preload_cache() {
+		// Skip during WordPress installation.
 		if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) ||
 			( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash
 			return;
 		}
 
-		$preload_key = $this->_get_preload_key();
-		// Skip if preload is disabled for this context
+		$preload_key = $this->get_preload_key();
+		// Skip if preload is disabled for this context.
 		if ( false === $preload_key ) {
 			return;
 		}
 
 		$preload_file = $this->preload_dir . $preload_key . '.php';
 
-		// First level: Check if preload file exists and is not expired
+		// First level: Check if preload file exists and is not expired.
 		if ( ! file_exists( $preload_file ) ) {
 			return;
 		}
 
 		$preload_file_time = filemtime( $preload_file );
 		if ( ! $preload_file_time || ( $preload_file_time + WP_FOCUS_PRELOAD_TTL ) <= time() ) {
-			// Preload file is expired, clean it up and skip
-			unlink( $preload_file );
+			// Preload file is expired, clean it up and skip.
+			unlink( $preload_file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink
 			return;
 		}
 
-		// Load and deserialize preload data
-		$preload_data = $this->_load_preload_file( $preload_file );
+		// Load and deserialize preload data.
+		$preload_data = $this->load_preload_file( $preload_file );
 		if ( ! $preload_data || ! isset( $preload_data['cache_data'] ) || ! isset( $preload_data['file_times'] ) ) {
-			// Corrupted preload file, clean it up
-			unlink( $preload_file );
+			// Corrupted preload file, clean it up.
+			unlink( $preload_file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink
 			return;
 		}
 
 		$current_time = time();
 
-		// Second level: Validate individual cache items and restore non-expired ones
+		// Second level: Validate individual cache items and restore non-expired ones.
 		foreach ( $preload_data['cache_data'] as $group => $items ) {
-			// Skip non-persistent groups (they shouldn't be in preload anyway)
+			// Skip non-persistent groups. (they shouldn't be in preload anyway).
 			if ( ! empty( $this->non_persistent_groups[ $group ] ) ) {
 				continue;
 			}
 
 			foreach ( $items as $key => $value ) {
-				// Check if we have file time data for this item
+				// Check if we have file time data for this item.
 				if ( ! isset( $preload_data['file_times'][ $group ][ $key ] ) ) {
 					continue;
 				}
 
 				$item_filemtime = $preload_data['file_times'][ $group ][ $key ];
 
-				// Check if item is expired using FOCUS cache logic (filemtime < current_time)
+				// Check if item is expired using FOCUS cache logic (filemtime < current_time).
 				if ( $item_filemtime < $current_time ) {
 					continue; // Skip expired item
 				}
 
-				// Item is valid, restore it to cache
+				// Item is valid, restore it to cache.
 				if ( ! isset( $this->cache[ $group ] ) ) {
 					$this->cache[ $group ] = array();
 				}
@@ -1973,21 +1989,21 @@ class WP_Object_Cache {
 	 * @param string $preload_file Path to the preload file.
 	 * @return array|false Preload data array or false on failure.
 	 */
-	protected function _load_preload_file( $preload_file ) {
-		$contents = file_get_contents( $preload_file );
+	protected function load_preload_file( $preload_file ) {
+		$contents = file_get_contents( $preload_file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 		if ( false === $contents ) {
 			return false;
 		}
 
-		// Extract serialized data from the PHP file format
+		// Extract serialized data from the PHP file format.
 		$data = substr( $contents, strlen( $this->cache_serial_header ), - strlen( $this->cache_serial_footer ) );
 		if ( empty( $data ) ) {
 			return false;
 		}
 
-		// Unserialize the data
-		$value = unserialize( $data );
-		if ( false === $value && serialize( false ) !== $data ) {
+		// Unserialize the data.
+		$value = unserialize( $data ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_unserialize
+		if ( false === $value && serialize( false ) !== $data ) { // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize
 			return false;
 		}
 
@@ -2001,20 +2017,20 @@ class WP_Object_Cache {
 	 * @return void
 	 */
 	public function save_preload_cache(): void {
-		// Skip if preload is not enabled
+		// Skip if preload is not enabled.
 		if ( ! WP_FOCUS_CACHE_PRELOAD && ! ( isset( $this->test_preload_enabled ) && $this->test_preload_enabled ) ) {
 			return;
 		}
 
-		// Skip during WordPress installation or if cache is empty
+		// Skip during WordPress installation or if cache is empty.
 		if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) ||
-			( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ||
+			( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) || // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 			empty( $this->cache ) ) {
 			return;
 		}
 
-		$preload_key = $this->_get_preload_key();
-		// Skip if preload is disabled for this context
+		$preload_key = $this->get_preload_key();
+		// Skip if preload is disabled for this context.
 		if ( false === $preload_key ) {
 			return;
 		}
@@ -2026,26 +2042,26 @@ class WP_Object_Cache {
 			return; // Preload file is still fresh, no need to save again.
 		}
 
-		// Build cache data and file time metadata
+		// Build cache data and file time metadata.
 		$cache_data_to_save = array();
 		$file_times         = array();
 
 		foreach ( $this->cache as $group => $items ) {
-			// Skip non-persistent groups
+			// Skip non-persistent groups.
 			if ( ! empty( $this->non_persistent_groups[ $group ] ) ) {
 				continue;
 			}
 
 			foreach ( $items as $key => $value ) {
-				// Get the cache file for this item to check its file time
-				$cache_file = $this->_get_focus_file( $key, $group );
+				// Get the cache file for this item to check its file time.
+				$cache_file = $this->get_focus_file( $key, $group );
 
 				if ( file_exists( $cache_file ) ) {
 					$cache_file_time = filemtime( $cache_file );
 
-					// Only include items with valid file times
+					// Only include items with valid file times.
 					if ( false !== $cache_file_time ) {
-						// Store cache data and file time
+						// Store cache data and file time.
 						if ( ! isset( $cache_data_to_save[ $group ] ) ) {
 							$cache_data_to_save[ $group ] = array();
 							$file_times[ $group ]         = array();
@@ -2058,19 +2074,19 @@ class WP_Object_Cache {
 			}
 		}
 
-		// Don't create empty preload files
+		// Don't create empty preload files.
 		if ( empty( $cache_data_to_save ) ) {
 			return;
 		}
 
-		// Build simplified preload data structure
+		// Build simplified preload data structure.
 		$preload_data = array(
 			'cache_data' => $cache_data_to_save,
 			'file_times' => $file_times,
 		);
 
-		// Save preload file using the same format as regular cache files
-		$this->_save_preload_file( $preload_file, $preload_data );
+		// Save preload file using the same format as regular cache files.
+		$this->save_preload_file( $preload_file, $preload_data );
 	}
 
 	/**
@@ -2083,38 +2099,38 @@ class WP_Object_Cache {
 	 * @param array  $preload_data The preload data to save.
 	 * @return bool True on success, false on failure.
 	 */
-	protected function _save_preload_file( $preload_file, $preload_data ) {
-		// Ensure preload directory exists
+	protected function save_preload_file( string $preload_file, array $preload_data ): bool {
+		// Ensure preload directory exists.
 		if ( ! is_dir( $this->preload_dir ) ) {
 			$this->mkdir( $this->preload_dir );
 		}
 
-		// Create temporary file
+		// Create temporary file.
 		$temp_file = tempnam( $this->preload_dir, 'preload_tmp' );
 		if ( false === $temp_file ) {
 			return false;
 		}
 
-		// Serialize and add header/footer
-		$serial = $this->cache_serial_header . serialize( $preload_data ) . $this->cache_serial_footer;
+		// Serialize and add header/footer.
+		$serial = $this->cache_serial_header . serialize( $preload_data ) . $this->cache_serial_footer; // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize
 
-		$fd = fopen( $temp_file, 'w' );
+		$fd = fopen( $temp_file, 'w' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen
 		if ( false === $fd ) {
-			unlink( $temp_file );
+			unlink( $temp_file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink
 			return false;
 		}
 
-		$fwrite = fwrite( $fd, $serial );
-		fclose( $fd );
+		$fwrite = fwrite( $fd, $serial ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite
+		fclose( $fd ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
 
 		if ( false === $fwrite ) {
-			unlink( $temp_file );
+			unlink( $temp_file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink
 			return false;
 		}
 
-		// Atomic move to final location
-		if ( ! rename( $temp_file, $preload_file ) ) {
-			unlink( $temp_file );
+		// Atomic move to final location.
+		if ( ! rename( $temp_file, $preload_file ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.rename_rename
+			unlink( $temp_file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink
 			return false;
 		}
 
@@ -2268,7 +2284,7 @@ class WP_Object_Cache {
 	 */
 	protected function save( int|string $key, mixed $data, string $group = 'default', int $expire = 0 ): bool {
 		// Skip file operations for non-persistent groups.
-		if ( ! $this->_should_persist( $group ) ) {
+		if ( ! $this->should_persist( $group ) ) {
 			return true;
 		}
 
@@ -2299,7 +2315,7 @@ class WP_Object_Cache {
 		// Make FOCUS Cache directories and temp file.
 		$this->mkdir( $cache_dir );
 		$group_dir  = $this->make_group_dir( $group );
-		$cache_file = $this->_get_focus_file( $key, $group );
+		$cache_file = $this->get_focus_file( $key, $group );
 		$temp_file  = tempnam( $cache_dir, 'tmp' );
 		if ( false === $temp_file ) {
 			return false;
@@ -2373,14 +2389,14 @@ class WP_Object_Cache {
 	 */
 	protected function load_from_disk( string $key, string $group ): mixed {
 		// Check if file exists and hasn't expired.
-		if ( ! $this->_focus_file_exists( $key, $group ) ) {
+		if ( ! $this->focus_file_exists( $key, $group ) ) {
 			return false;
 		}
 
-		$cache_file = $this->_get_focus_file( $key, $group );
+		$cache_file = $this->get_focus_file( $key, $group );
 
 		// Check expiration (negative value means expired).
-		if ( $this->_get_expiration( $key, $group ) < 0 ) {
+		if ( $this->get_expiration( $key, $group ) < 0 ) {
 			// File has expired, delete it.
 			unlink( $cache_file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink
 			return false;
@@ -2392,13 +2408,13 @@ class WP_Object_Cache {
 			return false;
 		}
 
-		// Extract serialized data from the PHP file format.
+		// Extract serialized data from the PHP file format..
 		$data = substr( $contents, strlen( $this->cache_serial_header ), - strlen( $this->cache_serial_footer ) );
 		if ( empty( $data ) ) {
 			return false;
 		}
 
-		// Unserialize the data.
+		// Unserialize the data..
 		$value = unserialize( $data ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_unserialize
 		if ( false === $value && serialize( false ) !== $data ) { // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize
 			return false;
@@ -2431,7 +2447,7 @@ class WP_Object_Cache {
 		// Only cleanup FOCUS-specific auxiliary caches.
 		// WordPress core manages $this->cache memory itself.
 
-		// Cleanup file path cache if it gets too large.
+		// Cleanup file path cache if it gets too large..
 		if ( count( $this->file_path_cache ) > $this->max_file_path_cache_items ) {
 			$this->file_path_cache = array_slice( $this->file_path_cache, -$this->file_path_cache_cleanup_size, null, true );
 		}

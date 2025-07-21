@@ -260,8 +260,8 @@ class FOCUS_Cache {
 	 */
 	public function add_admin_page_notices(): void {
 		// Show action success/failure messages.
-		if ( isset( $_GET['message'] ) ) { // WPCS: CSRF ok. Input var okay.
-			switch ( $_GET['message'] ) { // WPCS: CSRF ok. Input var okay.
+		if ( isset( $_GET['message'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			switch ( $_GET['message'] ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 				case 'cache-enabled':
 					$message = esc_html__( 'Object Cache enabled.', 'focus-cache' );
 					break;
