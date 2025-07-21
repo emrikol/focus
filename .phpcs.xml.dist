@@ -74,6 +74,16 @@
 		<exclude name="Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed" />
 	</rule>
 
+	<!-- Ignore WordPress.Files.FileName.InvalidClassFileName -->
+	<rule ref="WordPress.Files.FileName.InvalidClassFileName">
+		<exclude name="WordPress.Files.FileName.InvalidClassFileName" />
+	</rule>
+
+	<!-- Ignore Universal.Files.SeparateFunctionsFromOO.Mixed -->
+	<rule ref="Universal.Files.SeparateFunctionsFromOO.Mixed">
+		<exclude name="Universal.Files.SeparateFunctionsFromOO.Mixed" />
+	</rule>
+
 	<!-- Custom Sniffs -->
 	<rule ref="./phpcs/VIPServices/ruleset.xml"/>
 	<rule ref="VIPServices.Functions.TypeDeclaration">

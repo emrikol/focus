@@ -1,5 +1,4 @@
 <?php
-declare(strict_types=1);
 /**
  * Name: FOCUS Object Cache
  * Plugin URI: http://wordpress.org/plugins/focus-object-cache/
@@ -15,7 +14,9 @@ declare(strict_types=1);
  * @package WordPress
  */
 
-// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound
+declare(strict_types=1);
+
+// phpcs:disable WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedFunctionFound, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedConstantFound, WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedClassFound
 
 /**
  * Users with setups where multiple installs share a common wp-config.php or
@@ -726,7 +727,7 @@ class WP_Object_Cache {
 
 		// Ensure blog_id is set, default to 1 if not available yet.
 		if ( ! isset( $blog_id ) || empty( $blog_id ) ) {
-			$blog_id = 1;
+			$blog_id = 1; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 		}
 
 		if ( defined( 'CACHE_PATH' ) ) {
@@ -839,7 +840,7 @@ class WP_Object_Cache {
 	 * @since 0.1.0
 	 * @access public
 	 *
-	 * @param array $groups List of groups that are global.
+	 * @param array|string $groups List of groups that are global.
 	 */
 	public function add_global_groups( array|string $groups ): void {
 		$groups = (array) $groups;
@@ -856,7 +857,7 @@ class WP_Object_Cache {
 	 * @since 0.1.0
 	 * @access public
 	 *
-	 * @param array $groups List of groups that are global.
+	 * @param array|string $groups List of groups that are global.
 	 */
 	public function add_non_persistent_groups( array|string $groups ): void {
 		$groups = (array) $groups;
@@ -967,7 +968,7 @@ class WP_Object_Cache {
 	 * @since 0.1.0
 	 * @access public
 	 *
-	 * @param string $group Optional. Where the cache contents are grouped. Default 'default'.
+	 * @param string|false $group Optional. Where the cache contents are grouped. Default false.
 	 * @return bool False if not deleted and true on success.
 	 */
 	public function delete_group( string|false $group = false ): bool {
@@ -1040,7 +1041,7 @@ class WP_Object_Cache {
 	 *
 	 * @param int|string $key What the contents in the cache are called.
 	 * @param string     $group Where the cache contents are grouped.
-	 * @param string     $force Whether to force a refetch rather than relying on the local cache (default is false).
+	 * @param bool       $force Whether to force a refetch rather than relying on the local cache (default is false).
 	 * @param bool       $found Optional. Whether the key was found in the cache. Disambiguates a return of false, a storable value. Passed by reference. Default null.
 	 * @param bool       $stat  Optional. Whether or not to record stats.  Default true.
 	 * @return bool|mixed False on failure to retrieve contents or the cache contents on success
@@ -1110,7 +1111,7 @@ class WP_Object_Cache {
 			}
 
 			$unserialized_data = maybe_unserialize( $serialized_data );
-			if ( false === $unserialized_data && $serialized_data !== serialize( false ) ) {
+			if ( false === $unserialized_data && serialize( false ) !== $serialized_data ) { // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize
 				// Corrupted cache file, delete it.
 				$this->delete( $key, $group );
 				$found = false;
@@ -1273,7 +1274,8 @@ class WP_Object_Cache {
 
 		// Periodically check memory usage (every 100th set operation).
 		static $set_counter = 0;
-		if ( ++$set_counter % 100 === 0 ) {
+		++$set_counter;
+		if ( 0 === $set_counter % 100 ) {
 			$this->maybe_cleanup_memory();
 		}
 
@@ -1292,14 +1294,14 @@ class WP_Object_Cache {
 	 * @since 0.1.0
 	 * @access public
 	 */
-	public function stats() {
+	public function stats(): void {
 		?>
 		<p><strong>Cache Hits:</strong> <?php echo esc_html( $this->cache_hits ); ?></p>
 		<p><strong>Cache Misses:</strong> <?php echo esc_html( $this->cache_misses ); ?></p>
 		<h3>Object Cache:</h3>
 		<?php foreach ( $this->group_ops as $group => $ops ) : ?>
 			<?php
-			if ( ! isset( $_GET['debug_queries'] ) && 500 < count( $ops ) ) { // WPCS: CSRF ok. input var ok.
+			if ( ! isset( $_GET['debug_queries'] ) && 500 < count( $ops ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 				$ops = array_slice( $ops, 0, 500 );
 				echo "<big>Too many to show! <a href='" . esc_url( add_query_arg( 'debug_queries', 'true' ) ) . "'>Show them anyway</a>.</big>\n";
 			}
@@ -1478,7 +1480,7 @@ class WP_Object_Cache {
 		if ( ! empty( $missing_keys ) ) {
 			foreach ( $missing_keys as $key => $cache_key ) {
 				$disk_value = $this->load_from_disk( $cache_key, $group );
-				if ( $disk_value !== false ) {
+				if ( false !== $disk_value ) {
 					$results[ $key ] = $disk_value;
 					// Update memory cache for future hits.
 					$this->cache[ $group ][ $cache_key ] = $disk_value;
@@ -1638,7 +1640,7 @@ class WP_Object_Cache {
 	 * @since 1.1.0
 	 * @return bool True if WP-CLI context, false otherwise.
 	 */
-	public function is_wp_cli() {
+	public function is_wp_cli(): bool {
 		if ( null === $this->is_wp_cli ) {
 			$this->is_wp_cli = defined( 'WP_CLI' ) && WP_CLI;
 		}
@@ -1651,7 +1653,7 @@ class WP_Object_Cache {
 	 * @since 1.1.0
 	 * @return bool True if CRON context, false otherwise.
 	 */
-	public function is_doing_cron() {
+	public function is_doing_cron(): bool {
 		if ( null === $this->is_doing_cron ) {
 			$this->is_doing_cron = defined( 'DOING_CRON' ) && DOING_CRON;
 		}
@@ -1664,7 +1666,7 @@ class WP_Object_Cache {
 	 * @since 1.1.0
 	 * @return bool True if XML-RPC context, false otherwise.
 	 */
-	public function is_xmlrpc_request() {
+	public function is_xmlrpc_request(): bool {
 		if ( null === $this->is_xmlrpc_request ) {
 			$this->is_xmlrpc_request = defined( 'XMLRPC_REQUEST' ) && XMLRPC_REQUEST;
 		}
@@ -1681,7 +1683,7 @@ class WP_Object_Cache {
 	 * @param string     $group Cache group for the key existence check.
 	 * @return bool Whether the key exists in the cache for the given group.
 	 */
-	protected function isset_internal( $key, $group ) {
+	protected function isset_internal( int|string $key, string $group ): bool {
 		return isset( $this->cache[ $group ] ) && ( isset( $this->cache[ $group ][ $key ] ) || array_key_exists( $key, $this->cache[ $group ] ) );
 	}
 
@@ -1695,7 +1697,7 @@ class WP_Object_Cache {
 	 * @param string     $group Cache group for the key existence check.
 	 * @return bool Whether the cache file key exists.
 	 */
-	protected function focus_file_exists( $key, $group ) {
+	protected function focus_file_exists( int|string $key, string $group ): bool {
 		return file_exists( $this->get_focus_file( $key, $group ) );
 	}
 
@@ -1709,7 +1711,7 @@ class WP_Object_Cache {
 	 * @param string     $group Cache group for the key check.
 	 * @return int Seconds until the cache expires.
 	 */
-	protected function get_expiration( $key, $group ) {
+	protected function get_expiration( int|string $key, string $group ): int {
 		$cache_key    = $group . ':' . $key;
 		$current_time = time();
 
@@ -1748,7 +1750,7 @@ class WP_Object_Cache {
 	 * @param string     $group Cache group for the key check.
 	 * @return string The cache file.
 	 */
-	protected function get_focus_file( $key, $group ) {
+	protected function get_focus_file( int|string $key, string $group ): string {
 		$cache_key = $group . ':' . $key;
 
 		// Check if we already calculated this path.
@@ -1829,7 +1831,7 @@ class WP_Object_Cache {
 	 *
 	 * @param string $key_salt Salt to use.
 	 */
-	protected function salt_keys( $key_salt ) {
+	protected function salt_keys( string $key_salt ): void {
 		if ( strlen( $key_salt ) ) {
 			$this->key_salt = $key_salt . ':';
 		} else {
@@ -1844,9 +1846,9 @@ class WP_Object_Cache {
 	 * @since 1.1.0
 	 * @access protected
 	 *
-	 * @return string Normalized preload cache key including domain and blog context.
+	 * @return string|false Normalized preload cache key including domain and blog context, or false if preload is disabled.
 	 */
-	public function get_preload_key() {
+	public function get_preload_key(): string|false {
 		// Skip if preload is not enabled.
 		if ( ! WP_FOCUS_CACHE_PRELOAD && ! ( isset( $this->test_preload_enabled ) && $this->test_preload_enabled ) ) {
 			return false;
@@ -1901,7 +1903,7 @@ class WP_Object_Cache {
 		$url_hash = md5( $normalized_url );
 
 		// Include domain and blog ID for multisite and multi-domain support.
-		$blog_id     = isset( $blog_id ) ? $blog_id : 1;
+		$blog_id     = isset( $blog_id ) ? $blog_id : 1; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 		$preload_key = $domain_hash . '_' . $url_hash . '_' . $blog_id;
 
 		return $preload_key;
@@ -1914,7 +1916,7 @@ class WP_Object_Cache {
 	 * @since 1.1.0
 	 * @access protected
 	 */
-	protected function load_preload_cache() {
+	protected function load_preload_cache(): void {
 		// Skip during WordPress installation.
 		if ( ( defined( 'WP_INSTALLING' ) && WP_INSTALLING ) ||
 			( isset( $_SERVER['SCRIPT_NAME'] ) && strpos( $_SERVER['SCRIPT_NAME'], 'install.php' ) !== false ) ) { // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized, WordPress.Security.ValidatedSanitizedInput.MissingUnslash
@@ -1968,7 +1970,7 @@ class WP_Object_Cache {
 
 				// Check if item is expired using FOCUS cache logic (filemtime < current_time).
 				if ( $item_filemtime < $current_time ) {
-					continue; // Skip expired item
+					continue; // Skip expired item.
 				}
 
 				// Item is valid, restore it to cache.
@@ -1989,7 +1991,7 @@ class WP_Object_Cache {
 	 * @param string $preload_file Path to the preload file.
 	 * @return array|false Preload data array or false on failure.
 	 */
-	protected function load_preload_file( $preload_file ) {
+	protected function load_preload_file( string $preload_file ): array|false {
 		$contents = file_get_contents( $preload_file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 		if ( false === $contents ) {
 			return false;

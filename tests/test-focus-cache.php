@@ -1125,7 +1125,7 @@ class Tests_Focus_Cache extends WP_UnitTestCase {
 		$this->assertEquals($value2, $this->cache->get($key2, $group));
 
 		// Test preload key generation
-		$preload_key = $this->cache->_get_preload_key();
+		$preload_key = $this->cache->get_preload_key();
 		$this->assertNotEmpty($preload_key, 'Preload key should be generated');
 		$this->assertTrue(is_string($preload_key), 'Preload key should be a string');
 
@@ -1181,7 +1181,7 @@ class Tests_Focus_Cache extends WP_UnitTestCase {
 		$non_persistent_group = 'comment'; // This is in non_persistent_groups by default
 
 		// Verify that comment group is indeed non-persistent
-		$this->assertFalse($this->cache->_should_persist($non_persistent_group), 'Comment group should be non-persistent');
+		$this->assertFalse($this->cache->should_persist($non_persistent_group), 'Comment group should be non-persistent');
 
 		// Add data to both persistent and non-persistent groups
 		$this->cache->set('persistent_key', 'persistent_value', $persistent_group);
@@ -1221,12 +1221,12 @@ class Tests_Focus_Cache extends WP_UnitTestCase {
 
 		// First, test that preload works when WP-CLI is false
 		$this->cache->is_wp_cli = false;
-		$preload_key = $this->cache->_get_preload_key();
+		$preload_key = $this->cache->get_preload_key();
 		$this->assertNotFalse($preload_key, 'Preload should work when not in WP-CLI context');
 
 		// Now test that preload is disabled when WP-CLI is true
 		$this->cache->is_wp_cli = true;
-		$preload_key = $this->cache->_get_preload_key();
+		$preload_key = $this->cache->get_preload_key();
 		$this->assertFalse($preload_key, 'Preload should be disabled in WP-CLI context');
 	}
 
@@ -1244,12 +1244,12 @@ class Tests_Focus_Cache extends WP_UnitTestCase {
 
 		// First, test that preload works when CRON is false
 		$this->cache->is_doing_cron = false;
-		$preload_key = $this->cache->_get_preload_key();
+		$preload_key = $this->cache->get_preload_key();
 		$this->assertNotFalse($preload_key, 'Preload should work when not in CRON context');
 
 		// Now test that preload is disabled when CRON is true
 		$this->cache->is_doing_cron = true;
-		$preload_key = $this->cache->_get_preload_key();
+		$preload_key = $this->cache->get_preload_key();
 		$this->assertFalse($preload_key, 'Preload should be disabled in CRON context');
 	}
 
@@ -1267,12 +1267,12 @@ class Tests_Focus_Cache extends WP_UnitTestCase {
 
 		// First, test that preload works when XML-RPC is false
 		$this->cache->is_xmlrpc_request = false;
-		$preload_key = $this->cache->_get_preload_key();
+		$preload_key = $this->cache->get_preload_key();
 		$this->assertNotFalse($preload_key, 'Preload should work when not in XML-RPC context');
 
 		// Now test that preload is disabled when XML-RPC is true
 		$this->cache->is_xmlrpc_request = true;
-		$preload_key = $this->cache->_get_preload_key();
+		$preload_key = $this->cache->get_preload_key();
 		$this->assertFalse($preload_key, 'Preload should be disabled in XML-RPC context');
 	}
 
@@ -1298,14 +1298,14 @@ class Tests_Focus_Cache extends WP_UnitTestCase {
 		foreach ($non_get_methods as $method) {
 			$_SERVER['REQUEST_METHOD'] = $method;
 			
-			$preload_key = $this->cache->_get_preload_key();
+			$preload_key = $this->cache->get_preload_key();
 			$this->assertFalse($preload_key, "Preload should be disabled for {$method} requests");
 		}
 
 		// Test that GET works when no blocking contexts are present
 		$_SERVER['REQUEST_METHOD'] = 'GET';
 		
-		$preload_key = $this->cache->_get_preload_key();
+		$preload_key = $this->cache->get_preload_key();
 		$this->assertNotFalse($preload_key, 'Preload should work for GET requests');
 		$this->assertNotEmpty($preload_key, 'Preload key should not be empty for GET requests');
 
@@ -1337,10 +1337,10 @@ class Tests_Focus_Cache extends WP_UnitTestCase {
 
 		// Test that different domains generate different preload keys
 		$_SERVER['HTTP_HOST'] = 'domain1.com';
-		$key1 = $this->cache->_get_preload_key();
+		$key1 = $this->cache->get_preload_key();
 
 		$_SERVER['HTTP_HOST'] = 'domain2.com';
-		$key2 = $this->cache->_get_preload_key();
+		$key2 = $this->cache->get_preload_key();
 
 		$this->assertNotFalse($key1, 'Domain 1 should generate a valid preload key');
 		$this->assertNotFalse($key2, 'Domain 2 should generate a valid preload key');
