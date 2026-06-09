@@ -95,9 +95,13 @@ class Tests_Focus_Admin_Object_Cache_Double {
 }
 
 if ( ! class_exists( 'QM_Data' ) ) {
-	class QM_Data {
+	abstract class QM_Data {
 		public $prefetch;
 	}
+}
+
+if ( ! class_exists( 'QM_Data_Fallback' ) ) {
+	class QM_Data_Fallback extends QM_Data {}
 }
 
 if ( ! class_exists( 'QM_Collector' ) ) {
@@ -110,7 +114,7 @@ if ( ! class_exists( 'QM_Collector' ) ) {
 		}
 
 		public function get_storage(): QM_Data {
-			return new QM_Data();
+			return new QM_Data_Fallback();
 		}
 
 		public function get_data() {
@@ -256,6 +260,7 @@ class Tests_Focus_Admin extends WP_UnitTestCase {
 
 		public function test_query_monitor_prefetch_collector_and_output() {
 			require_once dirname( __DIR__ ) . '/includes/class-focus-query-monitor.php';
+			require_once dirname( __DIR__ ) . '/includes/class-focus-qm-data-prefetch.php';
 			require_once dirname( __DIR__ ) . '/includes/class-focus-qm-collector-prefetch.php';
 			require_once dirname( __DIR__ ) . '/includes/class-focus-qm-output-html-prefetch.php';
 
@@ -274,7 +279,7 @@ class Tests_Focus_Admin extends WP_UnitTestCase {
 
 				$wp_object_cache = new stdClass(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 				$empty_collector->process();
-				$this->assertFalse( isset( $empty_collector->get_data()->prefetch ) );
+				$this->assertSame( array(), $empty_collector->get_data()->prefetch );
 
 				$wp_object_cache = $original_cache; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 				$wp_object_cache->test_prefetch_enabled = true;
@@ -318,6 +323,7 @@ class Tests_Focus_Admin extends WP_UnitTestCase {
 				);
 
 				$collector = new FOCUS_QM_Collector_Prefetch();
+				$this->assertInstanceOf( FOCUS_QM_Data_Prefetch::class, $collector->get_storage() );
 				$collector->process();
 				$this->assertSame( 'file', $collector->get_data()->prefetch['backend'] );
 

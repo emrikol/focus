@@ -105,6 +105,7 @@
 	<rule ref="Emrikol.Namespaces.Namespace.MissingNamespace">
 		<exclude-pattern>focus.php</exclude-pattern>
 		<exclude-pattern>includes/class-focus-query-monitor.php</exclude-pattern>
+		<exclude-pattern>includes/class-focus-qm-data-prefetch.php</exclude-pattern>
 		<exclude-pattern>includes/class-focus-qm-collector-prefetch.php</exclude-pattern>
 		<exclude-pattern>includes/class-focus-qm-output-html-prefetch.php</exclude-pattern>
 		<exclude-pattern>includes/class-focus-cache.php</exclude-pattern>
@@ -114,6 +115,7 @@
 
 	<!-- Query Monitor adapter classes must match Query Monitor's global, untyped override signatures. -->
 	<rule ref="Emrikol.Classes.TypedProperty">
+		<exclude-pattern>includes/class-focus-qm-data-prefetch.php</exclude-pattern>
 		<exclude-pattern>includes/class-focus-qm-collector-prefetch.php</exclude-pattern>
 	</rule>
 	<rule ref="Emrikol.Functions.TypeDeclaration">

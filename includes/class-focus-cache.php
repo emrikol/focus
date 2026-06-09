@@ -189,6 +189,7 @@ class FOCUS_Cache {
 		// @codeCoverageIgnoreEnd
 
 		require_once __DIR__ . '/class-focus-query-monitor.php';
+		require_once __DIR__ . '/class-focus-qm-data-prefetch.php';
 		require_once __DIR__ . '/class-focus-qm-collector-prefetch.php';
 		require_once __DIR__ . '/class-focus-qm-output-html-prefetch.php';
 
