@@ -382,6 +382,15 @@ class Tests_Focus_Admin extends WP_UnitTestCase {
 							'result' => '[lc already]',
 						),
 					),
+					'get_multiple'     => array(
+						array(
+							'key'    => array( 'multi-alpha', 'multi-beta' ),
+							'size'   => 12,
+							'time'   => 0.006,
+							'group'  => 'options',
+							'result' => '1 hits, 1 misses',
+						),
+					),
 					'get_flush_number' => array(
 						array(
 							'key'    => 'skip',
@@ -592,6 +601,7 @@ class Tests_Focus_Admin extends WP_UnitTestCase {
 				$outputters['object_cache_group_stats']->output();
 				$group_output = ob_get_clean();
 				$this->assertStringContainsString( 'Group Stats for set', $group_output );
+				$this->assertStringContainsString( 'Group Stats for get_multiple', $group_output );
 				$this->assertStringContainsString( 'Totals:', $group_output );
 				$this->assertStringContainsString( 'default', $group_output );
 				$this->assertStringNotContainsString( 'skip_group', $group_output );

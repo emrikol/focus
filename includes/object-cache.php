@@ -708,17 +708,21 @@ class WP_Object_Cache {
 	 * @var array
 	 */
 	public array $stats = array(
-		'get'          => 0,
-		'get_local'    => 0,
-		'get_multi'    => 0,
-		'set'          => 0,
-		'set_local'    => 0,
-		'add'          => 0,
-		'delete'       => 0,
-		'delete_local' => 0,
-		'flush'        => 0,
-		'flush_group'  => 0,
-		'slow-ops'     => 0,
+		'get'                => 0,
+		'get_local'          => 0,
+		'get_multiple'       => 0,
+		'set'                => 0,
+		'set_local'          => 0,
+		'set_multiple'       => 0,
+		'set_multiple_local' => 0,
+		'add'                => 0,
+		'add_multiple'       => 0,
+		'delete'             => 0,
+		'delete_local'       => 0,
+		'delete_multiple'    => 0,
+		'flush'              => 0,
+		'flush_group'        => 0,
+		'slow-ops'           => 0,
 	);
 
 	/**
@@ -2051,7 +2055,7 @@ class WP_Object_Cache {
 
 		$this->qm_operations[ $operation ][] = $payload;
 
-		if ( $time > $this->slow_op_microseconds && 'get_multi' !== $operation ) {
+		if ( $time > $this->slow_op_microseconds ) {
 			++$this->stats['slow-ops'];
 			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_wp_debug_backtrace_summary -- Slow-operation Query Monitor rows need a stack summary.
 			$payload['backtrace']                     = function_exists( 'wp_debug_backtrace_summary' ) ? wp_debug_backtrace_summary() : null;
@@ -2362,7 +2366,7 @@ class WP_Object_Cache {
 
 		// Single group stat entry for the batch operation.
 		$this->group_ops[ $group ][] = sprintf( 'add_multiple (%d keys, %d successful)', count( $data ), $success_count );
-		$this->record_qm_operation( 'add', array_keys( $data ), $group, $data, $start, sprintf( '%d successful', $success_count ) );
+		$this->record_qm_operation( 'add_multiple', array_keys( $data ), $group, $data, $start, sprintf( '%d successful', $success_count ) );
 
 		return $results;
 	}
@@ -2420,7 +2424,7 @@ class WP_Object_Cache {
 
 		// Single group stat entry for the batch operation.
 		$this->group_ops[ $group ][] = sprintf( 'set_multiple (%d keys, %d successful)', count( $data ), $success_count );
-		$this->record_qm_operation( $this->should_persist( $group ) ? 'set' : 'set_local', array_keys( $data ), $group, $data, $start, sprintf( '%d successful', $success_count ) );
+		$this->record_qm_operation( $this->should_persist( $group ) ? 'set_multiple' : 'set_multiple_local', array_keys( $data ), $group, $data, $start, sprintf( '%d successful', $success_count ) );
 
 		return $results;
 	}
@@ -2509,7 +2513,7 @@ class WP_Object_Cache {
 
 		// Single group stat entry for the batch operation.
 		$this->group_ops[ $group ][] = sprintf( 'get_multiple (%d keys, %d hits, %d misses)', count( $keys ), $cache_hits, $cache_misses );
-		$this->record_qm_operation( 'get_multi', array_values( $keys ), $group, $results, $start, sprintf( '%d hits, %d misses', $cache_hits, $cache_misses ) );
+		$this->record_qm_operation( 'get_multiple', array_values( $keys ), $group, $results, $start, sprintf( '%d hits, %d misses', $cache_hits, $cache_misses ) );
 
 		return $results;
 	}
@@ -2581,7 +2585,7 @@ class WP_Object_Cache {
 
 		// Single group stat entry for the batch operation.
 		$this->group_ops[ $group ][] = sprintf( 'delete_multiple (%d keys, %d successful)', count( $keys ), $success_count );
-		$this->record_qm_operation( 'delete', $keys, $group, null, $start, sprintf( '%d successful', $success_count ) );
+		$this->record_qm_operation( 'delete_multiple', $keys, $group, null, $start, sprintf( '%d successful', $success_count ) );
 
 		return $results;
 	}

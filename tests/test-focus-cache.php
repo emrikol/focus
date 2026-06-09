@@ -1327,14 +1327,42 @@ class Tests_Focus_Cache extends WP_UnitTestCase {
 	 */
 	public function test_query_monitor_get_stats_returns_vip_compatible_data() {
 		$group = 'qm_group';
+		$local_group = 'qm_local_group';
 
 		$this->assertTrue( $this->cache->set( 'qm_key', array( 'value' => 'one' ), $group ) );
 		$this->assertSame( array( 'value' => 'one' ), $this->cache->get( 'qm_key', $group ) );
 		$this->assertFalse( $this->cache->get( 'missing_key', $group ) );
 
+		$this->assertSame(
+			array(
+				'add_multi_key' => true,
+			),
+			$this->cache->add_multiple( array( 'add_multi_key' => 'add_multi_value' ), $group )
+		);
+		$this->assertSame(
+			array(
+				'set_multi_key' => true,
+			),
+			$this->cache->set_multiple( array( 'set_multi_key' => 'set_multi_value' ), $group )
+		);
+		$this->cache->add_non_persistent_groups( array( $local_group ) );
+		$this->assertSame(
+			array(
+				'set_multi_local_key' => true,
+			),
+			$this->cache->set_multiple( array( 'set_multi_local_key' => 'set_multi_local_value' ), $local_group )
+		);
+
 		$multiple = $this->cache->get_multiple( array( 'qm_key', 'missing_key' ), $group );
 		$this->assertSame( array( 'value' => 'one' ), $multiple['qm_key'] );
 		$this->assertFalse( $multiple['missing_key'] );
+
+		$this->assertSame(
+			array(
+				'add_multi_key' => true,
+			),
+			$this->cache->delete_multiple( array( 'add_multi_key' ), $group )
+		);
 
 		$this->assertTrue( $this->cache->delete( 'qm_key', $group ) );
 
@@ -1358,7 +1386,11 @@ class Tests_Focus_Cache extends WP_UnitTestCase {
 		$this->assertGreaterThanOrEqual( 2, $stats['operation_counts']['set'] );
 		$this->assertGreaterThanOrEqual( 1, $stats['operation_counts']['get'] );
 		$this->assertGreaterThanOrEqual( 1, $stats['operation_counts']['get_local'] );
-		$this->assertSame( 1, $stats['operation_counts']['get_multi'] );
+		$this->assertSame( 1, $stats['operation_counts']['add_multiple'] );
+		$this->assertSame( 1, $stats['operation_counts']['set_multiple'] );
+		$this->assertSame( 1, $stats['operation_counts']['set_multiple_local'] );
+		$this->assertSame( 1, $stats['operation_counts']['get_multiple'] );
+		$this->assertSame( 1, $stats['operation_counts']['delete_multiple'] );
 		$this->assertSame( 1, $stats['operation_counts']['delete'] );
 		$this->assertGreaterThanOrEqual( 1, $stats['operation_counts']['slow-ops'] );
 
@@ -1372,9 +1404,14 @@ class Tests_Focus_Cache extends WP_UnitTestCase {
 		$this->assertGreaterThanOrEqual( 0, $set_operation['time'] );
 		$this->assertSame( 'stored', $set_operation['result'] );
 
-		$get_multi_operation = $stats['operations']['get_multi'][0];
-		$this->assertSame( array( 'qm_key', 'missing_key' ), $get_multi_operation['key'] );
-		$this->assertStringContainsString( 'hits', $get_multi_operation['result'] );
+		$get_multiple_operation = $stats['operations']['get_multiple'][0];
+		$this->assertSame( array( 'qm_key', 'missing_key' ), $get_multiple_operation['key'] );
+		$this->assertStringContainsString( 'hits', $get_multiple_operation['result'] );
+
+		$this->assertSame( array( 'add_multi_key' ), $stats['operations']['add_multiple'][0]['key'] );
+		$this->assertSame( array( 'set_multi_key' ), $stats['operations']['set_multiple'][0]['key'] );
+		$this->assertSame( array( 'set_multi_local_key' ), $stats['operations']['set_multiple_local'][0]['key'] );
+		$this->assertSame( array( 'add_multi_key' ), $stats['operations']['delete_multiple'][0]['key'] );
 	}
 
 	/**
