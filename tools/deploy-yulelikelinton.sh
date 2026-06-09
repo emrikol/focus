@@ -35,8 +35,10 @@ if [[ "${ALLOW_DIRTY}" != "1" && -n "$(git status --porcelain)" ]]; then
 fi
 
 if [[ "${RUN_CHECKS}" == "1" ]]; then
+	composer validate --strict
 	composer lint
 	composer check:cache-api
+	composer phpstan
 fi
 
 if [[ "${RUN_TESTS}" == "1" ]]; then
@@ -92,13 +94,17 @@ rsync -az --delete --delete-excluded \
 	--exclude tools \
 	--exclude '$WP_TESTS_DIR' \
 	--exclude .phpunit.cache \
+	--exclude .cache \
 	--exclude .claude \
 	--exclude .github \
 	--exclude .DS_Store \
+	--exclude dist \
 	--exclude run-tests.sh \
 	--exclude Dockerfile.test \
 	--exclude phpunit.xml.dist \
 	--exclude .phpcs.xml.dist \
+	--exclude phpstan.neon \
+	--exclude phpstan.neon.dist \
 	--exclude composer.json \
 	--exclude composer.lock \
 	--exclude CLAUDE.md \

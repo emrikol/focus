@@ -20,13 +20,13 @@ if ( ! class_exists( 'FOCUS_QM_Output_Html_Object_Cache_Base' ) ) {
 /**
  * Outputs the FOCUS prefetch Query Monitor child panel.
  *
- * @since 1.1.0
+ * @since 2.0.0
  */
 class FOCUS_QM_Output_Html_Prefetch extends FOCUS_QM_Output_Html_Object_Cache_Base {
 	/**
 	 * Initializes the outputter.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param QM_Collector $collector Query Monitor collector.
 	 */
@@ -40,7 +40,7 @@ class FOCUS_QM_Output_Html_Prefetch extends FOCUS_QM_Output_Html_Object_Cache_Ba
 	/**
 	 * Outputs the prefetch panel.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @return void
 	 */
@@ -62,7 +62,7 @@ class FOCUS_QM_Output_Html_Prefetch extends FOCUS_QM_Output_Html_Object_Cache_Ba
 	/**
 	 * Adds a menu class.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param array $classes Menu classes.
 	 * @return array Menu classes.
@@ -75,7 +75,7 @@ class FOCUS_QM_Output_Html_Prefetch extends FOCUS_QM_Output_Html_Object_Cache_Ba
 	/**
 	 * Adds the Prefetch child menu to Object Cache.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param array $menu Query Monitor panel menu.
 	 * @return array Query Monitor panel menu.
@@ -92,7 +92,7 @@ class FOCUS_QM_Output_Html_Prefetch extends FOCUS_QM_Output_Html_Object_Cache_Ba
 	/**
 	 * Outputs the summary table.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param array $prefetch Prefetch stats.
 	 * @return void
@@ -119,7 +119,7 @@ class FOCUS_QM_Output_Html_Prefetch extends FOCUS_QM_Output_Html_Object_Cache_Ba
 	/**
 	 * Outputs a grouped key section.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param string $heading Section heading.
 	 * @param array  $groups  Grouped keys.

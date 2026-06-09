@@ -20,13 +20,13 @@ if ( ! class_exists( 'QM_Data' ) ) {
 /**
  * Storage object for FOCUS object cache stats.
  *
- * @since 1.1.0
+ * @since 2.0.0
  */
 class FOCUS_QM_Data_Object_Cache extends QM_Data {
 	/**
 	 * Aggregate operation totals.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @var array
 	 */
 	public $totals = array();
@@ -34,7 +34,7 @@ class FOCUS_QM_Data_Object_Cache extends QM_Data {
 	/**
 	 * Operation counts keyed by operation name.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @var array
 	 */
 	public $operation_counts = array();
@@ -42,7 +42,7 @@ class FOCUS_QM_Data_Object_Cache extends QM_Data {
 	/**
 	 * Slow operations keyed by operation name.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @var array
 	 */
 	public $slow_ops = array();
@@ -50,7 +50,7 @@ class FOCUS_QM_Data_Object_Cache extends QM_Data {
 	/**
 	 * Groups represented by slow operations.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @var array
 	 */
 	public $slow_ops_groups = array();
@@ -58,7 +58,7 @@ class FOCUS_QM_Data_Object_Cache extends QM_Data {
 	/**
 	 * Operations keyed by operation name.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @var array
 	 */
 	public $operations = array();
@@ -66,7 +66,7 @@ class FOCUS_QM_Data_Object_Cache extends QM_Data {
 	/**
 	 * Groups represented by operations.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @var array
 	 */
 	public $groups = array();
@@ -74,7 +74,7 @@ class FOCUS_QM_Data_Object_Cache extends QM_Data {
 	/**
 	 * Per-operation, per-group aggregates.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @var array
 	 */
 	public $group_stats = array();

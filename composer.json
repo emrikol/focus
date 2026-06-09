@@ -1,6 +1,6 @@
 {
   "name": "emrikol/focus-object-cache",
-  "description": "File-based Object Cache is Utterly Slow: An Object Caching Dropin for WordPress that uses the local file system.",
+  "description": "A persistent object cache drop-in for WordPress with file and database storage backends.",
   "homepage": "https://github.com/emrikol/focus",
   "license": "GPL-3.0-or-later",
   "authors": [
@@ -27,7 +27,8 @@
   "repositories": [
     {
       "type": "vcs",
-      "url": "https://github.com/emrikol/phpcs"
+      "url": "https://github.com/emrikol/phpcs.git",
+      "no-api": true
     }
   ],
   "config": {
@@ -44,7 +45,8 @@
     "lint": "phpcs",
     "lint:fix": "phpcbf",
     "check:cache-api": "php tools/check-cache-api-parity.php",
+    "build:release": "bash tools/build-release.sh",
     "test": "phpunit",
-    "readme": "wp2md convert readme.txt > readme.md"
+    "readme": "@php -d error_reporting='E_ALL & ~E_DEPRECATED' ./vendor/bin/wp2md readme.txt readme.md"
   }
 }

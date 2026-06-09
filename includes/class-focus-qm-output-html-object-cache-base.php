@@ -20,13 +20,13 @@ if ( ! class_exists( 'QM_Output_Html' ) || ! class_exists( 'QM_Collector' ) ) {
 /**
  * Shared FOCUS object cache Query Monitor output helpers.
  *
- * @since 1.1.0
+ * @since 2.0.0
  */
 abstract class FOCUS_QM_Output_Html_Object_Cache_Base extends QM_Output_Html {
 	/**
 	 * Adds a child panel to the Object Cache parent menu.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param array  $menu  Query Monitor panel menu.
 	 * @param string $id    Panel ID.
@@ -51,7 +51,7 @@ abstract class FOCUS_QM_Output_Html_Object_Cache_Base extends QM_Output_Html {
 	/**
 	 * Formats bytes as a human-readable size.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param int|null $size Raw size.
 	 * @return string Human-readable size.
@@ -63,7 +63,7 @@ abstract class FOCUS_QM_Output_Html_Object_Cache_Base extends QM_Output_Html {
 	/**
 	 * Formats seconds as milliseconds.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param float|null $time Raw time in seconds.
 	 * @return string Human-readable milliseconds.
@@ -75,7 +75,7 @@ abstract class FOCUS_QM_Output_Html_Object_Cache_Base extends QM_Output_Html {
 	/**
 	 * Formats legacy object-cache result names.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param string $result Operation result.
 	 * @return string Human-readable result.
@@ -98,7 +98,7 @@ abstract class FOCUS_QM_Output_Html_Object_Cache_Base extends QM_Output_Html {
 	/**
 	 * Outputs a sortable table column header.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param string $title Column title.
 	 * @return void
@@ -112,7 +112,7 @@ abstract class FOCUS_QM_Output_Html_Object_Cache_Base extends QM_Output_Html {
 	/**
 	 * Outputs a filterable table column header.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param string $title  Column title.
 	 * @param array  $values Filter values.
@@ -128,7 +128,7 @@ abstract class FOCUS_QM_Output_Html_Object_Cache_Base extends QM_Output_Html {
 	/**
 	 * Outputs an operation key cell.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param array|string|null $key Operation key.
 	 * @return void
@@ -145,7 +145,7 @@ abstract class FOCUS_QM_Output_Html_Object_Cache_Base extends QM_Output_Html {
 	/**
 	 * Outputs a toggleable table cell for arrays.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param array $values Values.
 	 * @return void
@@ -177,7 +177,7 @@ abstract class FOCUS_QM_Output_Html_Object_Cache_Base extends QM_Output_Html {
 	/**
 	 * Outputs a toggleable table cell for a backtrace.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param string|null $backtrace Backtrace summary.
 	 * @return void
@@ -204,7 +204,7 @@ abstract class FOCUS_QM_Output_Html_Object_Cache_Base extends QM_Output_Html {
 	/**
 	 * Outputs a table cell.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param string|int|float|null $value  Cell value.
 	 * @param int|float|null        $weight Sort weight.
@@ -218,7 +218,7 @@ abstract class FOCUS_QM_Output_Html_Object_Cache_Base extends QM_Output_Html {
 	/**
 	 * Outputs a key-value table row.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param string $title Row title.
 	 * @param string $value Row value.
@@ -234,7 +234,7 @@ abstract class FOCUS_QM_Output_Html_Object_Cache_Base extends QM_Output_Html {
 	/**
 	 * Outputs the start of a key-value section.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param string $heading Section heading.
 	 * @return void
@@ -257,7 +257,7 @@ abstract class FOCUS_QM_Output_Html_Object_Cache_Base extends QM_Output_Html {
 	/**
 	 * Outputs the end of a key-value section.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @return void
 	 */

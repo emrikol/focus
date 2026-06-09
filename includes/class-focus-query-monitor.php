@@ -16,13 +16,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 /**
  * Registers FOCUS Query Monitor collectors and output panels.
  *
- * @since 1.1.0
+ * @since 2.0.0
  */
 class FOCUS_Query_Monitor {
 	/**
 	 * Registers Query Monitor filters.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @return void
 	 */
@@ -34,7 +34,7 @@ class FOCUS_Query_Monitor {
 	/**
 	 * Registers the FOCUS object cache collectors.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param array $collectors Query Monitor collectors.
 	 * @return array Query Monitor collectors.
@@ -52,7 +52,7 @@ class FOCUS_Query_Monitor {
 	/**
 	 * Registers the FOCUS object cache HTML output panels.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param array $outputters Query Monitor outputters.
 	 * @return array Query Monitor outputters.

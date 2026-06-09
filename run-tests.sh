@@ -120,7 +120,7 @@ while [[ $# -gt 0 ]]; do
       echo "  $0                          # Run single-site tests only"
       echo "  $0 --all                    # Run ALL tests (single-site + multisite)"
       echo "  $0 --multisite              # Run multisite tests only"
-      echo "  $0 --php 8.1 --wp 6.4       # Test with PHP 8.1 and WordPress 6.4"
+      echo "  $0 --php 8.1 --wp 7.0       # Test with PHP 8.1 and WordPress 7.0"
       echo "  $0 --verbose --testdox      # Detailed output with readable test names"
       echo "  $0 --multisite --verbose    # Multisite tests with detailed output"
       echo "  $0 --filter test_cache      # Run specific tests"

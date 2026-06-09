@@ -2,9 +2,10 @@ name: CI
 
 on:
   push:
-    branches: [ master ]
+    branches: [ main, 2.0.0 ]
+    tags: [ 'v*' ]
   pull_request:
-    branches: [ master ]
+    branches: [ main, 2.0.0 ]
 
 jobs:
   php-tests:
@@ -14,27 +15,21 @@ jobs:
         include:
           - php: 8.0
             wp: '7.0'
-            sniff: false
           - php: 8.1
             wp: '7.0'
-            sniff: false
           - php: 8.2
             wp: '7.0'
-            sniff: false
           - php: 8.3
             wp: '7.0'
-            sniff: false
           - php: 8.4
             wp: '7.0'
-            sniff: false
 
     env:
       WP_VERSION: ${{ matrix.wp }}
-      SNIFF: ${{ matrix.sniff }}
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y git unzip
@@ -46,13 +41,16 @@ jobs:
           coverage: none
 
       - name: Cache composer
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.composer/cache
-          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.json') }}
 
       - name: Install dependencies
         run: composer install --no-progress --prefer-dist
+
+      - name: Validate Composer metadata
+        run: composer validate --strict
 
       - name: Check object cache API parity
         run: composer check:cache-api
@@ -60,23 +58,11 @@ jobs:
       - name: PHPStan static analysis
         run: composer phpstan
 
-      - name: Prepare CodeSniffer (if sniff)
-        if: env.SNIFF == 'true'
-        run: |
-          PHPCS_DIR=/tmp/phpcs
-          SNIFFS_DIR=/tmp/sniffs
-          git clone --depth 1 https://github.com/squizlabs/PHP_CodeSniffer.git $PHPCS_DIR
-          git clone --depth 1 https://github.com/WordPress-Coding-Standards/WordPress-Coding-Standards.git $SNIFFS_DIR
-          git clone --depth 1 https://github.com/wimg/PHPCompatibility.git $SNIFFS_DIR/PHPCompatibility
-          $PHPCS_DIR/scripts/phpcs --config-set installed_paths $SNIFFS_DIR
-          phpenv rehash
-
       - name: Syntax check
-        run: find . -name '*.php' -print0 | xargs -0 -n 1 -P 4 php -l
+        run: find . -name '*.php' -not -path './vendor/*' -not -path './.cache/*' -not -path './dist/*' -not -path './$WP_TESTS_DIR/*' -print0 | xargs -0 -n 1 -P 4 php -l
 
       - name: Coding standards
-        if: env.SNIFF == 'true'
-        run: phpcs -p -s -v -n . --standard="WordPress-VIP" --extensions=php
+        run: composer lint
 
       - name: Run WordPress PHPUnit
         run: bash run-tests.sh --php ${{ matrix.php }} --wp ${{ matrix.wp }} --all

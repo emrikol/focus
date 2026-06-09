@@ -2,8 +2,8 @@
 /**
  * Name: FOCUS Object Cache
  * Plugin URI: http://wordpress.org/plugins/focus-object-cache/
- * Description: File-based Object Cache is Utterly Slow: An Object Caching Dropin for WordPress that uses the local file system.
- * Version: 1.0.2
+ * Description: A persistent object cache drop-in for WordPress with file and database storage backends.
+ * Version: 2.0.0
  * Text Domain: focus-cache
  * Author: Derrick Tennant
  * Author URI: https://emrikol.com/
@@ -679,7 +679,7 @@ class WP_Object_Cache {
 	/**
 	 * Operation counts exposed through the Query Monitor-compatible get_stats() API.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access public
 	 * @var array
 	 */
@@ -704,7 +704,7 @@ class WP_Object_Cache {
 	/**
 	 * Structured cache operations exposed through get_stats().
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access public
 	 * @var array
 	 */
@@ -713,7 +713,7 @@ class WP_Object_Cache {
 	/**
 	 * Structured slow cache operations exposed through get_stats().
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access public
 	 * @var array
 	 */
@@ -722,7 +722,7 @@ class WP_Object_Cache {
 	/**
 	 * Total time spent in instrumented cache operations.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access public
 	 * @var float
 	 */
@@ -731,7 +731,7 @@ class WP_Object_Cache {
 	/**
 	 * Total serialized size of values handled by instrumented cache operations.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access public
 	 * @var int
 	 */
@@ -740,7 +740,7 @@ class WP_Object_Cache {
 	/**
 	 * Slow object-cache operation threshold in seconds.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access public
 	 * @var float
 	 */
@@ -812,7 +812,7 @@ class WP_Object_Cache {
 	/**
 	 * Group used to store per-URL prefetch manifests.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access private
 	 * @var string
 	 */
@@ -821,7 +821,7 @@ class WP_Object_Cache {
 	/**
 	 * Whether a prefetch manifest is currently hydrating the runtime cache.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access public
 	 * @var bool
 	 */
@@ -832,7 +832,7 @@ class WP_Object_Cache {
 	 *
 	 * Values are false until the key is later read by application code.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access public
 	 * @var array
 	 */
@@ -841,7 +841,7 @@ class WP_Object_Cache {
 	/**
 	 * Runtime keys requested by prefetch, keyed by group and normalized cache key.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access public
 	 * @var array
 	 */
@@ -853,7 +853,7 @@ class WP_Object_Cache {
 	 * These misses are request-local and only populated by database prefetch, so normal cache misses
 	 * do not create persistent negative-cache state.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access public
 	 * @var array
 	 */
@@ -862,7 +862,7 @@ class WP_Object_Cache {
 	/**
 	 * Query Monitor-compatible prefetch statistics.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access public
 	 * @var array
 	 */
@@ -894,7 +894,7 @@ class WP_Object_Cache {
 	/**
 	 * Test mode flag for prefetch functionality.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access private
 	 * @var bool
 	 */
@@ -903,7 +903,7 @@ class WP_Object_Cache {
 	/**
 	 * Whether the prefetch shutdown hook has already been registered.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access private
 	 * @var bool
 	 */
@@ -912,7 +912,7 @@ class WP_Object_Cache {
 	/**
 	 * Used to detect if script is running via WP-CLI.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access private
 	 * @var bool
 	 */
@@ -921,7 +921,7 @@ class WP_Object_Cache {
 	/**
 	 * Used to detect if script is running via WordPress cron.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access private
 	 * @var bool
 	 */
@@ -930,7 +930,7 @@ class WP_Object_Cache {
 	/**
 	 * Used to detect if script is running via XML-RPC.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access private
 	 * @var bool
 	 */
@@ -1038,7 +1038,7 @@ class WP_Object_Cache {
 	/**
 	 * Requested persistent backend.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access private
 	 * @var string
 	 */
@@ -1047,7 +1047,7 @@ class WP_Object_Cache {
 	/**
 	 * Active persistent backend.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access private
 	 * @var string
 	 */
@@ -1056,7 +1056,7 @@ class WP_Object_Cache {
 	/**
 	 * Whether the database backend is available for this request.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access private
 	 * @var bool
 	 */
@@ -1065,7 +1065,7 @@ class WP_Object_Cache {
 	/**
 	 * Whether database schema availability has been checked.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access private
 	 * @var bool
 	 */
@@ -1074,7 +1074,7 @@ class WP_Object_Cache {
 	/**
 	 * Previous database bucket table name removed by the installer.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access private
 	 * @var string
 	 */
@@ -1083,7 +1083,7 @@ class WP_Object_Cache {
 	/**
 	 * Database item table name.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access private
 	 * @var string
 	 */
@@ -1092,7 +1092,7 @@ class WP_Object_Cache {
 	/**
 	 * Database prefetch key table name.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access private
 	 * @var string
 	 */
@@ -1101,7 +1101,7 @@ class WP_Object_Cache {
 	/**
 	 * Previous database metadata table name removed by the installer.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access private
 	 * @var string
 	 */
@@ -1110,7 +1110,7 @@ class WP_Object_Cache {
 	/**
 	 * Current blog ID used for database bucket identity.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access private
 	 * @var int
 	 */
@@ -1119,7 +1119,7 @@ class WP_Object_Cache {
 	/**
 	 * Current network ID used for database bucket identity.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access private
 	 * @var int
 	 */
@@ -1128,7 +1128,7 @@ class WP_Object_Cache {
 	/**
 	 * Cache groups scoped to the current network instead of a blog or install.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access private
 	 * @var array
 	 */
@@ -1137,7 +1137,7 @@ class WP_Object_Cache {
 	/**
 	 * Maximum serialized value size for the database backend. 0 means unlimited.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access private
 	 * @var int
 	 */
@@ -1146,7 +1146,7 @@ class WP_Object_Cache {
 	/**
 	 * Maximum database rows to garbage collect per delete class.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access private
 	 * @var int
 	 */
@@ -1155,7 +1155,7 @@ class WP_Object_Cache {
 	/**
 	 * Maximum prefetch keys to hydrate per database query chunk.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access private
 	 * @var int
 	 */
@@ -1367,7 +1367,7 @@ class WP_Object_Cache {
 	 * separate from global groups so multi-network installs can opt specific
 	 * groups into network buckets without changing core global-group semantics.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access public
 	 *
 	 * @param array|string $groups List of groups that are network-scoped.
@@ -1575,7 +1575,7 @@ class WP_Object_Cache {
 	 * Flush the object cache's runtime cache.
 	 *
 	 * This method only clears the in-memory cache, not the persistent
-	 * file-based cache.
+	 * cache backend.
 	 *
 	 * @since 0.2.0
 	 * @access public
@@ -1972,7 +1972,7 @@ class WP_Object_Cache {
 	 * The shape matches the data contract used by WordPress VIP's
 	 * qm-object-cache collectors.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @return array Object-cache statistics.
 	 */
@@ -1994,7 +1994,7 @@ class WP_Object_Cache {
 	/**
 	 * Returns prefetch statistics for Query Monitor consumers.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @return array Prefetch statistics.
 	 */
@@ -2007,7 +2007,7 @@ class WP_Object_Cache {
 	/**
 	 * Records one structured cache operation for Query Monitor consumers.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param string           $operation Operation name.
 	 * @param int|string|array $key       Cache key or keys.
@@ -2049,7 +2049,7 @@ class WP_Object_Cache {
 	/**
 	 * Calculates an operation payload size.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param mixed $data Cache operation data.
 	 * @return int Data size in bytes.
@@ -2069,7 +2069,7 @@ class WP_Object_Cache {
 	/**
 	 * Extracts unique operation groups for Query Monitor filters.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param array $operations Structured operations.
 	 * @return array Unique group names.
@@ -2091,7 +2091,7 @@ class WP_Object_Cache {
 	/**
 	 * Records the current prefetch manifest lookup.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param string $prefetch_key Current prefetch manifest key.
 	 * @return void
@@ -2105,7 +2105,7 @@ class WP_Object_Cache {
 	/**
 	 * Starts tracking a prefetch manifest load.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param string $prefetch_key Current prefetch manifest key.
 	 * @param array  $manifest     Saved prefetch manifest.
@@ -2127,7 +2127,7 @@ class WP_Object_Cache {
 	/**
 	 * Finishes tracking a prefetch manifest load.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param float $started Load start time.
 	 * @return void
@@ -2142,7 +2142,7 @@ class WP_Object_Cache {
 	/**
 	 * Records requested prefetch keys for a cache group.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param string $group Cache group.
 	 * @param array  $keys  Cache keys from the manifest.
@@ -2164,7 +2164,7 @@ class WP_Object_Cache {
 	/**
 	 * Records one batched prefetch load operation.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @return void
 	 */
@@ -2175,7 +2175,7 @@ class WP_Object_Cache {
 	/**
 	 * Records one cache key successfully hydrated by prefetch.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param string     $group Cache group.
 	 * @param int|string $key   Normalized cache key.
@@ -2193,7 +2193,7 @@ class WP_Object_Cache {
 	/**
 	 * Records one prefetched cache key later used by application code.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param string     $group Cache group.
 	 * @param int|string $key   Normalized cache key.
@@ -2211,7 +2211,7 @@ class WP_Object_Cache {
 	/**
 	 * Records a saved prefetch manifest.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param array $groups  Saved prefetch groups.
 	 * @param float $started Save start time.
@@ -2228,7 +2228,7 @@ class WP_Object_Cache {
 	/**
 	 * Refreshes derived prefetch statistics.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @return void
 	 */
@@ -2271,7 +2271,7 @@ class WP_Object_Cache {
 	/**
 	 * Counts sanitized cache keys in grouped prefetch data.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param array $groups Grouped prefetch keys.
 	 * @return int Total cache keys.
@@ -2792,7 +2792,7 @@ class WP_Object_Cache {
 	/**
 	 * Configures the persistent storage backend.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param string $backend Requested backend name.
 	 * @return void
@@ -2805,7 +2805,7 @@ class WP_Object_Cache {
 	/**
 	 * Normalizes a backend name.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param string $backend Backend name.
 	 * @return string Normalized backend name.
@@ -2823,7 +2823,7 @@ class WP_Object_Cache {
 	/**
 	 * Determines whether the active backend is database-backed.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @return bool Whether the database backend is active.
 	 */
@@ -2834,7 +2834,7 @@ class WP_Object_Cache {
 	/**
 	 * Installs database backend tables when supported by the active class.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @return bool Whether tables were installed.
 	 */
@@ -2845,7 +2845,7 @@ class WP_Object_Cache {
 	/**
 	 * Runs database garbage collection when supported by the active class.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param int $limit Maximum rows to delete.
 	 * @return int Number of rows deleted.
@@ -2859,7 +2859,7 @@ class WP_Object_Cache {
 	/**
 	 * Returns the current network ID without requiring late-loaded APIs.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @return int Current network ID, or 0 for single-site installs.
 	 */
@@ -2891,7 +2891,7 @@ class WP_Object_Cache {
 	/**
 	 * Check if we're in a WP-CLI context.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @return bool True if WP-CLI context, false otherwise.
 	 */
 	public function is_wp_cli(): bool {
@@ -2904,7 +2904,7 @@ class WP_Object_Cache {
 	/**
 	 * Check if we're in a CRON context.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @return bool True if CRON context, false otherwise.
 	 */
 	public function is_doing_cron(): bool {
@@ -2917,7 +2917,7 @@ class WP_Object_Cache {
 	/**
 	 * Check if we're in an XML-RPC context.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @return bool True if XML-RPC context, false otherwise.
 	 */
 	public function is_xmlrpc_request(): bool {
@@ -2944,7 +2944,7 @@ class WP_Object_Cache {
 	/**
 	 * Determines whether database prefetch learned that a key is missing.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param int|string $key   Normalized cache key.
 	 * @param string     $group Cache group.
@@ -2957,7 +2957,7 @@ class WP_Object_Cache {
 	/**
 	 * Records a request-local database miss learned during prefetch.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param int|string $key   Normalized cache key.
 	 * @param string     $group Cache group.
@@ -2970,7 +2970,7 @@ class WP_Object_Cache {
 	/**
 	 * Clears a request-local database miss.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param int|string $key   Normalized cache key.
 	 * @param string     $group Cache group.
@@ -2987,7 +2987,7 @@ class WP_Object_Cache {
 	/**
 	 * Clears request-local database misses.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param string|null $group Optional cache group to clear.
 	 * @return void
@@ -3018,7 +3018,7 @@ class WP_Object_Cache {
 	/**
 	 * Determines whether a persistent cache entry has expired.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param int|string $key   Normalized cache key.
 	 * @param string     $group Cache group.
@@ -3179,7 +3179,7 @@ class WP_Object_Cache {
 	/**
 	 * Determines whether prefetching is enabled.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @return bool Whether per-URL cache prefetching is enabled.
 	 */
@@ -3190,7 +3190,7 @@ class WP_Object_Cache {
 	/**
 	 * Registers the prefetch manifest save callback for the end of the request.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @return void
 	 */
@@ -3229,7 +3229,7 @@ class WP_Object_Cache {
 	/**
 	 * Generates the current prefetch manifest cache key.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @return string|false Prefetch key, or false when prefetching is disabled.
 	 */
@@ -3251,7 +3251,7 @@ class WP_Object_Cache {
 	/**
 	 * Builds a stable request context for the prefetch key.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @return string Normalized request context.
 	 */
@@ -3311,7 +3311,7 @@ class WP_Object_Cache {
 	/**
 	 * Normalizes query arguments for stable URL hashing.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param string $query Query string.
 	 * @return array Normalized query arguments.
@@ -3331,7 +3331,7 @@ class WP_Object_Cache {
 	/**
 	 * Sorts an array recursively by key.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param array $value Array to sort.
 	 * @return void
@@ -3349,7 +3349,7 @@ class WP_Object_Cache {
 	/**
 	 * Loads the saved prefetch manifest and hydrates cached groups with get_multiple().
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @return void
 	 */
@@ -3402,7 +3402,7 @@ class WP_Object_Cache {
 	/**
 	 * Saves the current runtime cache key manifest for the current URL/context.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @return void
 	 */
@@ -3435,7 +3435,7 @@ class WP_Object_Cache {
 	/**
 	 * Builds a grouped list of runtime cache keys suitable for a prefetch manifest.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @return array Grouped prefetch keys.
 	 */
@@ -3461,7 +3461,7 @@ class WP_Object_Cache {
 	/**
 	 * Sanitizes and de-duplicates manifest keys without triggering doing-it-wrong notices.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param array $keys Cache keys.
 	 * @return array Sanitized keys.
@@ -3843,14 +3843,14 @@ class WP_Object_Cache {
 /**
  * File-backed FOCUS object cache implementation.
  *
- * @since 1.1.0
+ * @since 2.0.0
  */
 class FOCUS_File_Object_Cache extends WP_Object_Cache {}
 
 /**
  * Database-backed FOCUS object cache implementation.
  *
- * @since 1.1.0
+ * @since 2.0.0
  */
 class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 	/**
@@ -4760,7 +4760,7 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 	/**
 	 * Records database prefetch hydration as logical get_multiple operations.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param array $requests      Prefetch request data.
 	 * @param array $loaded_values Values hydrated from the database, keyed by lookup key.

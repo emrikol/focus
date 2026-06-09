@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-FOCUS Object Cache is a WordPress plugin that implements file-based object caching as a drop-in replacement for WordPress's default non-persistent object cache. The plugin provides persistent caching using the local filesystem when database-based caching solutions like Redis or Memcached are not available.
+FOCUS Object Cache is a WordPress plugin that implements a persistent object-cache drop-in for WordPress. It supports file-backed storage by default and an optional custom database-table backend when dedicated object-cache services like Redis or Memcached are not available.
 
 ## Development Commands
 
@@ -33,7 +33,7 @@ composer lint:fix  # Auto-fix PHP coding standards issues
 ./run-tests.sh --multisite         # Run multisite tests only
 ./run-tests.sh --debug             # Run tests with verbose output
 ./run-tests.sh --php 8.1           # Test with specific PHP version (8.1, 8.2, etc.)
-./run-tests.sh --wp 6.4            # Test with specific WordPress version
+./run-tests.sh --wp 7.0            # Test with specific WordPress version
 ./run-tests.sh --shell             # Interactive debugging shell
 ./run-tests.sh --lint              # Run PHP syntax check only
 ./run-tests.sh --cleanup           # Clean up Docker test containers and images
@@ -116,7 +116,7 @@ The `--multisite` flag runs tests in a WordPress multisite environment:
 
 **Core Cache Functionality (`tests/test-focus-cache.php`):**
 
-- File-based storage implementation and directory structure
+- File and database storage implementations
 - Cache expiration via file modification time
 - Configuration constants (WP_FOCUS_MAXTTL, WP_CACHE_KEY_SALT)
 - Non-persistent groups and security measures
@@ -142,9 +142,8 @@ The `--multisite` flag runs tests in a WordPress multisite environment:
 ### Build and Release
 
 ```bash
-grunt readme             # Convert readme.txt to readme.md
-grunt release            # Create release package in /release directory
-grunt version:patch      # Bump version numbers across files
+composer readme          # Convert readme.txt to readme.md
+composer build:release   # Create release package in /dist
 ```
 
 ## Architecture
@@ -153,16 +152,15 @@ grunt version:patch      # Bump version numbers across files
 
 **Main Plugin File (`focus.php`)**
 
-- Contains the `FOCUS_Cache` class which handles admin interface and plugin lifecycle
+- Loads the `FOCUS_Cache` class which handles admin interface and plugin lifecycle
 - Manages enabling/disabling the object cache drop-in
 - Provides admin UI for cache management in WordPress admin
 
 **Object Cache Drop-in (`includes/object-cache.php`)**
 
-- Implements `WP_Object_Cache` class that replaces WordPress's default object cache
-- Stores cache data as serialized, base64-encoded files in `/wp-content/focus-object-cache/`
-- Supports cache groups, expiration, and WordPress multisite
-- Uses file modification time for expiration tracking
+- Implements the object cache drop-in that replaces WordPress's default object cache
+- Supports file and database storage backends
+- Supports cache groups, expiration, batch operations, prefetch, and WordPress multisite
 
 **Admin Interface (`includes/admin-page.php`)**
 
@@ -171,17 +169,17 @@ grunt version:patch      # Bump version numbers across files
 
 ### Cache Storage Strategy
 
-- Cache files stored in `/wp-content/focus-object-cache/[group]/[key].php`
-- Files contain PHP comment headers/footers to prevent direct execution
-- Uses base64 encoding and PHP serialization for data storage
-- File modification time represents cache expiration timestamp
+- File backend cache files are stored in `/wp-content/focus-object-cache/[group]/[key].php`
+- Database backend cache rows are stored in custom transient cache tables
 - Supports cache key salting via `WP_CACHE_KEY_SALT` constant
+- Supports optional request prefetching via `WP_FOCUS_CACHE_PREFETCH`
 
 ### Configuration Constants
 
 - `WP_FOCUS_MAXTTL`: Maximum cache expiration time (default: 1 year)
 - `WP_CACHE_KEY_SALT`: Cache key prefix for uniqueness
-- `CACHE_PATH`: Custom cache directory path (optional)
+- `WP_FOCUS_BACKEND`: Persistent backend, either `file` or `database`
+- `WP_FOCUS_CACHE_PREFETCH`: Enables request prefetching
 
 ### WordPress Integration
 
@@ -192,7 +190,7 @@ The plugin operates as a WordPress "drop-in" - it copies `object-cache.php` to `
 - Follows WordPress coding standards (enforced by PHPCS)
 - Uses the `Emrikol` custom PHPCS standard (type safety, namespace validation, docblock enforcement)
 - PHP 8.0+ compatibility required
-- WordPress 6.5+ minimum version
+- WordPress 6.5+ minimum version, tested through WordPress 7.0
 - Supports multisite installations
 - Uses `focus` text domain for internationalization
 - All global functions/classes prefixed with `focus` or `FOCUS`
@@ -202,7 +200,7 @@ The plugin operates as a WordPress "drop-in" - it copies `object-cache.php` to `
 Tests use Docker containers with:
 
 - PHP 8.2 with MariaDB 10.6
-- WordPress 6.5 test environment
+- WordPress 7.0 test environment by default
 - Automatic WordPress test suite setup via SVN
 - Custom test runner script handles container lifecycle
 

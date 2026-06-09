@@ -5,6 +5,7 @@ $WP_TESTS_DIR/
 /.cache
 /.phpunit.cache
 /phpstan.neon
+/dist
 .DS_Store
 phpunit-single-output.txt
 phpunit-multisite-output.txt

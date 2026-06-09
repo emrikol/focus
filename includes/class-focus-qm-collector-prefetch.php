@@ -20,13 +20,13 @@ if ( ! class_exists( 'QM_Collector' ) || ! class_exists( 'QM_Data' ) ) {
 /**
  * Collects FOCUS prefetch stats from the object-cache drop-in.
  *
- * @since 1.1.0
+ * @since 2.0.0
  */
 class FOCUS_QM_Collector_Prefetch extends QM_Collector {
 	/**
 	 * Collector ID.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @var string
 	 */
 	public $id = 'object_cache_prefetch';
@@ -34,7 +34,7 @@ class FOCUS_QM_Collector_Prefetch extends QM_Collector {
 	/**
 	 * Returns the collector label.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @return string Collector label.
 	 */
@@ -45,7 +45,7 @@ class FOCUS_QM_Collector_Prefetch extends QM_Collector {
 	/**
 	 * Returns the collector storage object.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @return QM_Data Storage object.
 	 */
@@ -56,7 +56,7 @@ class FOCUS_QM_Collector_Prefetch extends QM_Collector {
 	/**
 	 * Collects prefetch stats.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @return void
 	 */

@@ -6,27 +6,54 @@
 **Requires at least:** 6.5 \
 **Tested up to:** 7.0 \
 **Requires PHP:** 8.0 \
-**Stable tag:** 1.0.2 \
+**Stable tag:** 2.0.0 \
 **License:** GPLv3 or later \
 **License URI:** http://www.gnu.org/licenses/gpl-3.0.html
 
-File-based Object Cache is Utterly Slow: An Object Caching Dropin for WordPress that uses the local file system.
+A persistent object cache drop-in for WordPress with file and database storage backends.
 
 ## Description
 
-I needed a persistent object cache while doing work on a budget hosting provider.  A lot of the other file-based caching plugins were either bundled with other things I didn't need (W3 Total Cache), or were old and broken.
+FOCUS Object Cache provides a persistent object-cache drop-in for WordPress. It uses a file backend by default and can also use a custom database-table backend for environments where local file storage is not the best fit.
 
-On the sites I've tested this with, that have slow database servers, I have noticed an increase in page generation times of about 2x.  On the other hand, for sites that have fast database servers it can actually _increase_ page generation time.  Whenever possible, I'd recommend using Memcached, Redis, or your other quality cache of choice.
+The database backend stores transient cache data in custom tables and supports group deletion, multisite blog buckets, global cache buckets, network cache buckets, batch cache operations, and prefetch hydration.
+
+Prefetch is optional. When enabled with `WP_FOCUS_CACHE_PREFETCH`, FOCUS records the cache keys used for each request URL and hydrates them on the next matching request. The database backend can load a request's prefetch keys with a single joined SELECT.
+
+Whenever possible, use Memcached, Redis, or another dedicated object-cache service. FOCUS is intended for hosts and environments where those services are unavailable or impractical.
 
 I've been heavily influenced by [redis-cache](https://wordpress.org/plugins/redis-cache/), [wp-redis](https://wordpress.org/plugins/wp-redis/), [W3 Total Cache](https://wordpress.org/plugins/w3-total-cache/), and [wp-memcached](https://github.com/Automattic/wp-memcached) to name a few.
 
 ## Installation
 
-Install like any other plugin, directly from your plugins page or manually by copying the files to the `plugins/` folder.  Go to the plugin settings page at Settings->FOCUS Cache and click `Enable Object Cache`.
+Install like any other plugin, directly from your plugins page or manually by copying the files to the `plugins/` folder. Go to the plugin settings page at Settings->FOCUS Cache and click `Enable Object Cache`.
+
+The file backend is used by default. To use the database backend, define this in `wp-config.php` before enabling or updating the drop-in:
+
+`define( 'WP_FOCUS_BACKEND', 'database' );`
+
+To enable prefetch:
+
+`define( 'WP_FOCUS_CACHE_PREFETCH', true );`
+
+Database backend tables contain transient cache data. They may be dropped and rebuilt during backend installation or updates.
 
 ## Changelog
 
-## 1.0.2
+### 2.0.0
+
+* New: Added a database-backed object cache backend using custom WordPress database tables.
+* New: Added optional request prefetching with database-backed single-query hydration.
+* New: Added Query Monitor-compatible object cache panels and a FOCUS Prefetch subpanel.
+* New: Added WordPress 7.0 object cache API parity checks and support for modern cache functions, including salted cache helpers and multiple-key operations.
+* New: Added PHPStan using WordPress core-style configuration.
+* Improved: Rebuilt the database schema as transient cache storage with direct bucket hashes, no runtime schema checks, and bounded garbage collection.
+* Improved: Reduced normal-request database overhead for the database backend.
+* Improved: Added database backend setup during activation, drop-in enable, and drop-in update.
+* Improved: Expanded unit tests across single-site, multisite, database backend, prefetch, Query Monitor, and WordPress 7.0 cache API compatibility.
+* Changed: Database cache tables are treated as disposable transient cache data and may be dropped/rebuilt when the backend is installed or updated.
+
+### 1.0.2
 
 * New: Added plugin activation hook (`on_activation()`) to flush cache on install.
 * Improved: Now flushes cache after enabling, disabling, or updating the drop-in.
@@ -51,6 +78,10 @@ Install like any other plugin, directly from your plugins page or manually by co
 First Version
 
 ## Upgrade Notice
+
+### 2.0.0
+
+Adds the database backend, optional prefetching, Query Monitor panels, and WordPress 7.0 object cache API parity. Database backend tables contain transient cache data and may be rebuilt during installation or updates.
 
 ### 1.0.1
 

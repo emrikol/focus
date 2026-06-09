@@ -164,7 +164,7 @@ class FOCUS_Cache {
 	/**
 	 * Returns the configured persistent backend.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access public
 	 *
 	 * @return string Configured persistent backend.
@@ -176,7 +176,7 @@ class FOCUS_Cache {
 	/**
 	 * Registers FOCUS Query Monitor panels when Query Monitor is available.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access public
 	 *
 	 * @return void
@@ -413,6 +413,9 @@ class FOCUS_Cache {
 				switch ( $action ) {
 					case 'enable-cache':
 						$result = $wp_filesystem->copy( plugin_dir_path( __FILE__ ) . '/object-cache.php', WP_CONTENT_DIR . '/object-cache.php', true );
+						if ( $result ) {
+							$result = $this->prepare_database_backend();
+						}
 						wp_cache_flush();
 						$message = $result ? 'cache-enabled' : 'enable-cache-failed';
 						break;
@@ -422,7 +425,10 @@ class FOCUS_Cache {
 						wp_cache_flush();
 						break;
 					case 'update-dropin':
-						$result  = $wp_filesystem->copy( plugin_dir_path( __FILE__ ) . '/object-cache.php', WP_CONTENT_DIR . '/object-cache.php', true );
+						$result = $wp_filesystem->copy( plugin_dir_path( __FILE__ ) . '/object-cache.php', WP_CONTENT_DIR . '/object-cache.php', true );
+						if ( $result ) {
+							$result = $this->prepare_database_backend();
+						}
 						$message = $result ? 'dropin-updated' : 'update-dropin-failed';
 						wp_cache_flush();
 						break;
@@ -511,17 +517,14 @@ class FOCUS_Cache {
 	 * @return void
 	 */
 	public function on_activation(): void {
-		if ( $this->is_database_backend_configured() ) {
-			$this->install_database_tables();
-			$this->schedule_database_gc();
-		}
+		$this->prepare_database_backend();
 		wp_cache_flush();
 	}
 
 	/**
 	 * Determines whether the database backend is configured.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access public
 	 *
 	 * @return bool Whether the database backend is configured.
@@ -535,7 +538,7 @@ class FOCUS_Cache {
 	/**
 	 * Installs database backend tables when the FOCUS drop-in is active.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access public
 	 *
 	 * @return bool Whether tables were installed.
@@ -543,17 +546,17 @@ class FOCUS_Cache {
 	public function install_database_tables(): bool {
 		global $wp_object_cache;
 
-		if ( ! isset( $wp_object_cache ) || ! is_object( $wp_object_cache ) || ! method_exists( $wp_object_cache, 'install_database_tables' ) ) {
-			return false;
+		if ( isset( $wp_object_cache ) && is_object( $wp_object_cache ) && method_exists( $wp_object_cache, 'install_database_tables' ) && $wp_object_cache->install_database_tables() ) {
+			return true;
 		}
 
-		return (bool) $wp_object_cache->install_database_tables();
+		return $this->install_database_tables_directly();
 	}
 
 	/**
 	 * Schedules recurring database garbage collection.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access public
 	 *
 	 * @return void
@@ -567,7 +570,7 @@ class FOCUS_Cache {
 	/**
 	 * Runs database garbage collection through the active object cache.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @access public
 	 *
 	 * @return void
@@ -578,5 +581,89 @@ class FOCUS_Cache {
 		if ( isset( $wp_object_cache ) && is_object( $wp_object_cache ) && method_exists( $wp_object_cache, 'run_database_gc' ) ) {
 			$wp_object_cache->run_database_gc();
 		}
+	}
+
+	/**
+	 * Prepares the configured database backend.
+	 *
+	 * @since 2.0.0
+	 * @access protected
+	 *
+	 * @return bool Whether the backend is ready.
+	 */
+	protected function prepare_database_backend(): bool {
+		if ( ! $this->is_database_backend_configured() ) {
+			return true;
+		}
+
+		if ( ! $this->install_database_tables() ) {
+			return false;
+		}
+
+		$this->schedule_database_gc();
+
+		return true;
+	}
+
+	/**
+	 * Installs the database schema without relying on the active object-cache drop-in.
+	 *
+	 * This is needed when the admin UI has just copied the drop-in during the
+	 * current request and WordPress cannot have loaded that new drop-in yet.
+	 *
+	 * @since 2.0.0
+	 * @access private
+	 *
+	 * @return bool Whether the tables were installed.
+	 */
+	private function install_database_tables_directly(): bool {
+		global $wpdb;
+
+		if ( ! isset( $wpdb ) || ! is_object( $wpdb ) || empty( $wpdb->base_prefix ) ) {
+			return false;
+		}
+
+		$charset     = $wpdb->get_charset_collate();
+		$old_buckets = $wpdb->base_prefix . 'focus_cache_buckets';
+		$items       = $wpdb->base_prefix . 'focus_cache_items';
+		$old_meta    = $wpdb->base_prefix . 'focus_cache_meta';
+		$prefetch    = $wpdb->base_prefix . 'focus_cache_prefetch_keys';
+
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$drop_result = $wpdb->query( "DROP TABLE IF EXISTS `{$old_buckets}`, `{$items}`, `{$old_meta}`, `{$prefetch}`" );
+
+		$item_result = $wpdb->query(
+			"CREATE TABLE `{$items}` (
+				bucket_hash binary(16) NOT NULL,
+				key_hash binary(16) NOT NULL,
+				cache_key longtext NOT NULL,
+				cache_value longblob NOT NULL,
+				value_size int unsigned NOT NULL,
+				flags int unsigned NOT NULL DEFAULT 0,
+				expires_at bigint unsigned NOT NULL,
+				created_at bigint unsigned NOT NULL,
+				updated_at bigint unsigned NOT NULL,
+				PRIMARY KEY (bucket_hash, key_hash),
+				KEY expires_at (expires_at)
+			) {$charset}"
+		);
+
+		$prefetch_result = $wpdb->query(
+			"CREATE TABLE `{$prefetch}` (
+				request_hash binary(16) NOT NULL,
+				bucket_hash binary(16) NOT NULL,
+				key_hash binary(16) NOT NULL,
+				cache_group varchar(191) NOT NULL,
+				cache_key longtext NOT NULL,
+				expires_at bigint unsigned NOT NULL,
+				created_at bigint unsigned NOT NULL,
+				updated_at bigint unsigned NOT NULL,
+				PRIMARY KEY (request_hash, bucket_hash, key_hash),
+				KEY expires_at (expires_at)
+			) {$charset}"
+		);
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		return false !== $drop_result && false !== $item_result && false !== $prefetch_result;
 	}
 }

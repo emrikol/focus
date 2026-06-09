@@ -20,13 +20,13 @@ if ( ! class_exists( 'QM_Data' ) ) {
 /**
  * Storage object for FOCUS prefetch stats.
  *
- * @since 1.1.0
+ * @since 2.0.0
  */
 class FOCUS_QM_Data_Prefetch extends QM_Data {
 	/**
 	 * Prefetch stats.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @var array
 	 */
 	public $prefetch = array();

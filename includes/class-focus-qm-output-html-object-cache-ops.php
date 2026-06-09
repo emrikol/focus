@@ -20,13 +20,13 @@ if ( ! class_exists( 'FOCUS_QM_Output_Html_Object_Cache_Base' ) ) {
 /**
  * Outputs FOCUS object cache operation rows.
  *
- * @since 1.1.0
+ * @since 2.0.0
  */
 class FOCUS_QM_Output_Html_Object_Cache_Ops extends FOCUS_QM_Output_Html_Object_Cache_Base {
 	/**
 	 * Initializes the outputter.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param QM_Collector $collector Query Monitor collector.
 	 */
@@ -40,7 +40,7 @@ class FOCUS_QM_Output_Html_Object_Cache_Ops extends FOCUS_QM_Output_Html_Object_
 	/**
 	 * Outputs operation rows.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @return void
 	 */
@@ -102,7 +102,7 @@ class FOCUS_QM_Output_Html_Object_Cache_Ops extends FOCUS_QM_Output_Html_Object_
 	/**
 	 * Adds a menu class.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param array $classes Menu classes.
 	 * @return array Menu classes.
@@ -115,7 +115,7 @@ class FOCUS_QM_Output_Html_Object_Cache_Ops extends FOCUS_QM_Output_Html_Object_
 	/**
 	 * Adds the Operations child menu.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param array $menu Query Monitor panel menu.
 	 * @return array Query Monitor panel menu.

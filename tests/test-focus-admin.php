@@ -68,6 +68,10 @@ class Tests_Focus_Admin_Database_Lifecycle_Double extends Tests_Focus_Admin_Page
 	public function schedule_database_gc(): void {
 		++$this->schedule_database_gc_calls;
 	}
+
+	public function prepare_database_backend_for_testing(): bool {
+		return $this->prepare_database_backend();
+	}
 }
 
 class Tests_Focus_Admin_Filesystem_Double {
@@ -901,8 +905,16 @@ class Tests_Focus_Admin extends WP_UnitTestCase {
 		$this->assertFalse( wp_cache_get( 'database_activation_key', 'database_activation_group' ) );
 	}
 
+	public function test_database_backend_prepare_installs_tables_and_schedules_gc() {
+		$admin = new Tests_Focus_Admin_Database_Lifecycle_Double( FOCUS_PLUGIN_FILE );
+
+		$this->assertTrue( $admin->prepare_database_backend_for_testing() );
+		$this->assertSame( 1, $admin->install_database_tables_calls );
+		$this->assertSame( 1, $admin->schedule_database_gc_calls );
+	}
+
 	public function test_database_lifecycle_methods_delegate_to_active_object_cache() {
-		global $wp_object_cache;
+		global $wpdb, $wp_object_cache;
 
 		$admin = $this->admin();
 		$original_cache = $wp_object_cache;
@@ -918,7 +930,9 @@ class Tests_Focus_Admin extends WP_UnitTestCase {
 			$this->assertSame( 1, $cache_double->run_database_gc_calls );
 
 			$wp_object_cache = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
-			$this->assertFalse( $admin->install_database_tables() );
+			$this->assertTrue( $admin->install_database_tables() );
+			$this->assertNotEmpty( $wpdb->get_results( "DESCRIBE `{$wpdb->base_prefix}focus_cache_items`" ) );
+			$this->assertNotEmpty( $wpdb->get_results( "DESCRIBE `{$wpdb->base_prefix}focus_cache_prefetch_keys`" ) );
 		} finally {
 			$wp_object_cache = $original_cache; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 		}

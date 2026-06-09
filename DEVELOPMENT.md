@@ -43,7 +43,7 @@ This guide covers everything you need to know for developing, testing, and debug
 The project uses Docker for isolated, consistent testing across environments. The test runner automatically:
 
 - Sets up PHP 8.2 environment
-- Installs WordPress 6.5 test suite
+- Installs WordPress 7.0 test suite by default
 - Configures MariaDB 10.6 database
 - Installs PHPUnit and dependencies
 
@@ -268,12 +268,12 @@ focus/
 
 ### Object Cache Implementation
 
-The FOCUS Object Cache (`includes/object-cache.php`) implements WordPress's `WP_Object_Cache` interface using file-based storage:
+The FOCUS Object Cache (`includes/object-cache.php`) implements WordPress's object cache API using file or database-backed storage:
 
-- **Storage location:** `/wp-content/focus-object-cache/[group]/[key].php`
-- **File format:** PHP files with comment headers to prevent direct execution
-- **Data encoding:** Base64-encoded, serialized PHP data
-- **Expiration:** Uses file modification time
+- **File backend storage:** `/wp-content/focus-object-cache/[group]/[key].php`
+- **Database backend storage:** Custom transient cache tables using deterministic bucket and key hashes
+- **Data encoding:** Serialized PHP data
+- **Expiration:** File modification time for the file backend, `expires_at` rows for the database backend
 - **Multisite support:** Separate cache per blog
 
 ### Key Constants
@@ -281,6 +281,8 @@ The FOCUS Object Cache (`includes/object-cache.php`) implements WordPress's `WP_
 ```php
 WP_CACHE_KEY_SALT    // Cache key uniqueness (default: '')
 WP_FOCUS_MAXTTL      // Maximum cache TTL (default: 1 year)
+WP_FOCUS_BACKEND     // Persistent backend: 'file' or 'database'
+WP_FOCUS_CACHE_PREFETCH // Optional request prefetching
 CACHE_PATH           // Custom cache directory (optional)
 ```
 
@@ -290,7 +292,7 @@ The plugin operates as a WordPress "drop-in":
 
 1. Copies `object-cache.php` to `/wp-content/` during activation
 2. WordPress automatically loads the drop-in
-3. Replaces default non-persistent cache with persistent file-based cache
+3. Replaces default non-persistent cache with persistent file or database-backed cache
 
 ## Troubleshooting
 
@@ -404,7 +406,7 @@ echo 'Set 1000 items: ' . (microtime(true) - \$start) . ' seconds';
 2. **Run full test suite:** `./run-tests.sh`
 3. **Check coding standards:** `phpcs --extensions=php .`
 4. **Test with WordPress:** Install in local WordPress instance
-5. **Create release package:** `grunt release` (if Gruntfile exists)
+5. **Create release package:** `composer build:release`
 
 ---
 

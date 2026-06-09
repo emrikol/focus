@@ -20,13 +20,13 @@ if ( ! class_exists( 'FOCUS_QM_Output_Html_Object_Cache_Base' ) ) {
 /**
  * Outputs the FOCUS Object Cache Query Monitor parent panel.
  *
- * @since 1.1.0
+ * @since 2.0.0
  */
 class FOCUS_QM_Output_Html_Object_Cache extends FOCUS_QM_Output_Html_Object_Cache_Base {
 	/**
 	 * Initializes the outputter.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param QM_Collector $collector Query Monitor collector.
 	 */
@@ -40,7 +40,7 @@ class FOCUS_QM_Output_Html_Object_Cache extends FOCUS_QM_Output_Html_Object_Cach
 	/**
 	 * Returns the panel label.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @return string Panel label.
 	 */
@@ -51,7 +51,7 @@ class FOCUS_QM_Output_Html_Object_Cache extends FOCUS_QM_Output_Html_Object_Cach
 	/**
 	 * Outputs object cache totals and operation counts.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @return void
 	 */
@@ -101,7 +101,7 @@ class FOCUS_QM_Output_Html_Object_Cache extends FOCUS_QM_Output_Html_Object_Cach
 	/**
 	 * Adds a menu class.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param array $classes Menu classes.
 	 * @return array Menu classes.
@@ -114,7 +114,7 @@ class FOCUS_QM_Output_Html_Object_Cache extends FOCUS_QM_Output_Html_Object_Cach
 	/**
 	 * Adds the Object Cache parent menu.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @param array $menu Query Monitor menu.
 	 * @return array Query Monitor menu.

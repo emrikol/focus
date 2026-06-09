@@ -20,13 +20,13 @@ if ( ! class_exists( 'QM_Collector' ) || ! class_exists( 'QM_Data' ) ) {
 /**
  * Collects FOCUS slow object cache operations.
  *
- * @since 1.1.0
+ * @since 2.0.0
  */
 class FOCUS_QM_Collector_Object_Cache_Slow_Ops extends QM_Collector {
 	/**
 	 * Collector ID. Matches VIP's Query Monitor slow object-cache panel.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 * @var string
 	 */
 	public $id = 'object_cache_slow_ops';
@@ -34,7 +34,7 @@ class FOCUS_QM_Collector_Object_Cache_Slow_Ops extends QM_Collector {
 	/**
 	 * Returns the collector label.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @return string Collector label.
 	 */
@@ -45,7 +45,7 @@ class FOCUS_QM_Collector_Object_Cache_Slow_Ops extends QM_Collector {
 	/**
 	 * Returns the collector storage object.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @return QM_Data Storage object.
 	 */
@@ -56,7 +56,7 @@ class FOCUS_QM_Collector_Object_Cache_Slow_Ops extends QM_Collector {
 	/**
 	 * Collects slow object cache operation rows.
 	 *
-	 * @since 1.1.0
+	 * @since 2.0.0
 	 *
 	 * @return void
 	 */
