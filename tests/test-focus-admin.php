@@ -245,7 +245,7 @@ class Tests_Focus_Admin extends WP_UnitTestCase {
 			$this->assertNotFalse( has_action( is_multisite() ? 'network_admin_menu' : 'admin_menu', array( $admin, 'add_admin_menu_page' ) ) );
 			$this->assertNotFalse( has_action( 'admin_notices', array( $admin, 'show_admin_notices' ) ) );
 			$this->assertNotFalse( has_action( 'network_admin_notices', array( $admin, 'show_admin_notices' ) ) );
-			$this->assertSame( 20, has_action( 'plugins_loaded', array( $admin, 'maybe_register_query_monitor' ) ) );
+			$this->assertSame( 0, has_action( 'plugins_loaded', array( $admin, 'maybe_register_query_monitor' ) ) );
 			$admin->maybe_register_query_monitor();
 
 			$links = $admin->add_plugin_actions_links( array( 'deactivate' => 'Deactivate' ) );
@@ -337,6 +337,15 @@ class Tests_Focus_Admin extends WP_UnitTestCase {
 
 				$outputter = new FOCUS_QM_Output_Html_Prefetch( $collector );
 				$this->assertContains( 'qm-focus-prefetch', $outputter->admin_class( array() ) );
+
+				$menu = $outputter->panel_menu(
+					array(
+						'cache' => array(
+							'children' => array(),
+						),
+					)
+				);
+				$this->assertSame( 'qm-focus_prefetch', $menu['cache']['children'][0]['id'] );
 
 				$menu = $outputter->panel_menu(
 					array(

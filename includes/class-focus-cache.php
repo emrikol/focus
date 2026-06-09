@@ -85,7 +85,7 @@ class FOCUS_Cache {
 		add_action( 'load-' . $this->screen, array( $this, 'do_admin_actions' ) );
 		add_action( 'load-' . $this->screen, array( $this, 'add_admin_page_notices' ) );
 		add_action( 'focus_cache_database_gc', array( $this, 'run_database_gc' ) );
-		add_action( 'plugins_loaded', array( $this, 'maybe_register_query_monitor' ), 20 );
+		add_action( 'plugins_loaded', array( $this, 'maybe_register_query_monitor' ), 0 );
 
 		add_filter(
 			sprintf(

@@ -89,7 +89,9 @@ class FOCUS_QM_Output_Html_Prefetch extends QM_Output_Html {
 			)
 		);
 
-		if ( isset( $menu['object_cache'] ) ) {
+		if ( isset( $menu['cache'] ) ) {
+			$menu['cache']['children'][] = $item;
+		} elseif ( isset( $menu['object_cache'] ) ) {
 			$menu['object_cache']['children'][] = $item;
 		} else {
 			$menu['focus_prefetch'] = $item;
