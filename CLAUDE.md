@@ -173,6 +173,9 @@ composer build:release   # Create release package in /dist
 - Database backend cache rows are stored in custom transient cache tables
 - Supports cache key salting via `WP_CACHE_KEY_SALT` constant
 - Supports optional request prefetching via `WP_FOCUS_CACHE_PREFETCH`
+- Prefetch saves grouped runtime cache keys at shutdown, hydrates matching requests early, excludes non-persistent/internal groups, and uses `WP_FOCUS_PREFETCH_TTL` for manifest expiry
+- Database prefetch uses `focus_cache_prefetch_keys` plus joined batch reads from `focus_cache_items`, and carries requested-but-missing keys into the next manifest
+- Query Monitor includes Object Cache panels and a FOCUS Prefetch subpanel for requested, loaded, missing, used, unused, and estimated savings metrics
 
 ### Configuration Constants
 
@@ -180,6 +183,7 @@ composer build:release   # Create release package in /dist
 - `WP_CACHE_KEY_SALT`: Cache key prefix for uniqueness
 - `WP_FOCUS_BACKEND`: Persistent backend, either `file` or `database`
 - `WP_FOCUS_CACHE_PREFETCH`: Enables request prefetching
+- `WP_FOCUS_PREFETCH_TTL`: Prefetch manifest TTL in seconds (default: 300)
 
 ### WordPress Integration
 

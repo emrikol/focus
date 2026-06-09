@@ -276,6 +276,21 @@ The FOCUS Object Cache (`includes/object-cache.php`) implements WordPress's obje
 - **Expiration:** File modification time for the file backend, `expires_at` rows for the database backend
 - **Multisite support:** Separate cache per blog
 
+### Prefetch
+
+Prefetch is disabled by default and enabled with `WP_FOCUS_CACHE_PREFETCH`.
+When enabled, FOCUS builds a request key from the current request context,
+saves the grouped runtime cache keys at `shutdown` priority `PHP_INT_MAX`, and
+hydrates the next matching request as early as the drop-in can.
+
+- **TTL:** `WP_FOCUS_PREFETCH_TTL`, defaulting to five minutes
+- **File backend:** stores the manifest as an ordinary cache item in the prefetch group
+- **Database backend:** stores normalized request/group/key rows in `focus_cache_prefetch_keys`
+- **Hydration:** database prefetch loads keys from `focus_cache_items` with joined batch queries
+- **Miss carry-forward:** database prefetch records requested-but-missing keys for the current request and merges them into the next manifest
+- **Exclusions:** non-persistent groups and FOCUS's internal prefetch group are not saved
+- **Visibility:** Query Monitor exposes Object Cache panels plus a FOCUS Prefetch subpanel with requested, loaded, missing, used, unused, and estimated savings metrics
+
 ### Key Constants
 
 ```php
@@ -283,6 +298,7 @@ WP_CACHE_KEY_SALT    // Cache key uniqueness (default: '')
 WP_FOCUS_MAXTTL      // Maximum cache TTL (default: 1 year)
 WP_FOCUS_BACKEND     // Persistent backend: 'file' or 'database'
 WP_FOCUS_CACHE_PREFETCH // Optional request prefetching
+WP_FOCUS_PREFETCH_TTL // Prefetch manifest TTL in seconds (default: 300)
 CACHE_PATH           // Custom cache directory (optional)
 ```
 

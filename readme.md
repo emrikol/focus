@@ -20,6 +20,12 @@ The database backend stores transient cache data in custom tables and supports g
 
 Prefetch is optional. When enabled with `WP_FOCUS_CACHE_PREFETCH`, FOCUS records the cache keys used for each request URL and hydrates them on the next matching request. The database backend can load a request's prefetch keys with a single joined SELECT.
 
+Prefetch manifests expire after `WP_FOCUS_PREFETCH_TTL`, which defaults to five minutes. They are saved at the end of the request on the latest shutdown priority so the next matching request can hydrate the keys seen during the previous request. Non-persistent groups and FOCUS's internal prefetch group are excluded.
+
+With the file backend, prefetch manifests are stored as ordinary cache items in the prefetch group. With the database backend, prefetch keys are stored in the normalized `focus_cache_prefetch_keys` table and hydrated from `focus_cache_items` in a joined batch query. Database prefetch also remembers keys that were requested by a prefetch manifest but missing from storage, then carries those keys into the next manifest so newly populated values can be prefetched on the following request.
+
+The Query Monitor integration adds an Object Cache panel plus a FOCUS Prefetch subpanel. The prefetch subpanel reports requested, loaded, missing, used, and unused keys, along with estimated calls and time saved.
+
 Whenever possible, use Memcached, Redis, or another dedicated object-cache service. FOCUS is intended for hosts and environments where those services are unavailable or impractical.
 
 I've been heavily influenced by [redis-cache](https://wordpress.org/plugins/redis-cache/), [wp-redis](https://wordpress.org/plugins/wp-redis/), [W3 Total Cache](https://wordpress.org/plugins/w3-total-cache/), and [wp-memcached](https://github.com/Automattic/wp-memcached) to name a few.
@@ -35,6 +41,10 @@ The file backend is used by default. To use the database backend, define this in
 To enable prefetch:
 
 `define( 'WP_FOCUS_CACHE_PREFETCH', true );`
+
+The prefetch manifest TTL can be adjusted if needed:
+
+`define( 'WP_FOCUS_PREFETCH_TTL', 300 );`
 
 Database backend tables contain transient cache data. They may be dropped and rebuilt during backend installation or updates.
 
