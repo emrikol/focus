@@ -512,33 +512,47 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 		$fresh_cache->test_prefetch_enabled = true;
 		$fresh_cache->load_prefetch_manifest();
 
-			$this->assertSame( 'value_1', $fresh_cache->cache[ $group_1 ][ $fresh_cache->key( 'key_1', $group_1 ) ] );
-			$this->assertSame( 'value_2', $fresh_cache->cache[ $group_2 ][ $fresh_cache->key( 'key_2', $group_2 ) ] );
-			$this->assertStringNotContainsString( 'get_multiple', wp_json_encode( $fresh_cache->group_ops ) );
+		$this->assertSame( 'value_1', $fresh_cache->cache[ $group_1 ][ $fresh_cache->key( 'key_1', $group_1 ) ] );
+		$this->assertSame( 'value_2', $fresh_cache->cache[ $group_2 ][ $fresh_cache->key( 'key_2', $group_2 ) ] );
 
-			$loaded_stats = $fresh_cache->get_prefetch_stats();
-			$this->assertSame( 'database', $loaded_stats['backend'] );
-			$this->assertTrue( $loaded_stats['manifest_found'] );
-			$this->assertSame( 2, $loaded_stats['manifest_groups'] );
-			$this->assertSame( 2, $loaded_stats['manifest_keys'] );
-			$this->assertSame( 2, $loaded_stats['requested_keys'] );
-			$this->assertSame( 2, $loaded_stats['loaded_keys'] );
-			$this->assertSame( 0, $loaded_stats['used_keys'] );
-			$this->assertSame( 2, $loaded_stats['unused_keys'] );
-			$this->assertSame( 1, $loaded_stats['load_operations'] );
+		$object_cache_stats = $fresh_cache->get_stats();
+		$this->assertSame( 2, $object_cache_stats['operation_counts']['get_multiple'] );
+		$this->assertContains( $group_1, $object_cache_stats['groups'] );
+		$this->assertContains( $group_2, $object_cache_stats['groups'] );
 
-			$this->assertSame( 'value_1', $fresh_cache->get( 'key_1', $group_1 ) );
-
-			$used_stats = $fresh_cache->get_prefetch_stats();
-			$this->assertSame( 1, $used_stats['used_keys'] );
-			$this->assertSame( 1, $used_stats['unused_keys'] );
-			$this->assertSame( 1, $used_stats['calls_saved'] );
-			$this->assertSame( 0, $used_stats['net_calls_saved'] );
-			$this->assertArrayHasKey( $group_1, $used_stats['used_groups'] );
-			$this->assertArrayHasKey( $group_2, $used_stats['unused_groups'] );
-
-			$this->database_cache = $fresh_cache;
+		$get_multiple_operations = array();
+		foreach ( $object_cache_stats['operations']['get_multiple'] as $operation ) {
+			$get_multiple_operations[ $operation['group'] ] = $operation;
 		}
+
+		$this->assertSame( array( $fresh_cache->key( 'key_1', $group_1 ) ), $get_multiple_operations[ $group_1 ]['key'] );
+		$this->assertSame( '1 hits, 0 misses', $get_multiple_operations[ $group_1 ]['result'] );
+		$this->assertSame( array( $fresh_cache->key( 'key_2', $group_2 ) ), $get_multiple_operations[ $group_2 ]['key'] );
+		$this->assertSame( '1 hits, 0 misses', $get_multiple_operations[ $group_2 ]['result'] );
+
+		$loaded_stats = $fresh_cache->get_prefetch_stats();
+		$this->assertSame( 'database', $loaded_stats['backend'] );
+		$this->assertTrue( $loaded_stats['manifest_found'] );
+		$this->assertSame( 2, $loaded_stats['manifest_groups'] );
+		$this->assertSame( 2, $loaded_stats['manifest_keys'] );
+		$this->assertSame( 2, $loaded_stats['requested_keys'] );
+		$this->assertSame( 2, $loaded_stats['loaded_keys'] );
+		$this->assertSame( 0, $loaded_stats['used_keys'] );
+		$this->assertSame( 2, $loaded_stats['unused_keys'] );
+		$this->assertSame( 1, $loaded_stats['load_operations'] );
+
+		$this->assertSame( 'value_1', $fresh_cache->get( 'key_1', $group_1 ) );
+
+		$used_stats = $fresh_cache->get_prefetch_stats();
+		$this->assertSame( 1, $used_stats['used_keys'] );
+		$this->assertSame( 1, $used_stats['unused_keys'] );
+		$this->assertSame( 1, $used_stats['calls_saved'] );
+		$this->assertSame( 0, $used_stats['net_calls_saved'] );
+		$this->assertArrayHasKey( $group_1, $used_stats['used_groups'] );
+		$this->assertArrayHasKey( $group_2, $used_stats['unused_groups'] );
+
+		$this->database_cache = $fresh_cache;
+	}
 
 	public function test_database_backend_prefetch_ignores_disabled_missing_and_false_key_manifests() {
 		$cache = $this->init_database_cache();

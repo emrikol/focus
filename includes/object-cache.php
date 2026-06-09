@@ -2033,10 +2033,11 @@ class WP_Object_Cache {
 	 * @param mixed            $data      Cache value used for size calculation.
 	 * @param float            $started   Operation start time from microtime( true ).
 	 * @param string           $result    Human-readable operation result.
+	 * @param float|null       $elapsed   Optional measured elapsed time.
 	 * @return void
 	 */
-	protected function record_qm_operation( string $operation, int|string|array $key, string $group, mixed $data, float $started, string $result ): void {
-		$time = microtime( true ) - $started;
+	protected function record_qm_operation( string $operation, int|string|array $key, string $group, mixed $data, float $started, string $result, ?float $elapsed = null ): void {
+		$time = null === $elapsed ? microtime( true ) - $started : $elapsed;
 		$size = $this->get_qm_data_size( $data );
 
 		$this->stats[ $operation ] ??= 0;
@@ -4318,6 +4319,7 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 
 				$requests[ $lookup_key ] = array(
 					'group'     => $group,
+					'raw_key'   => $key,
 					'cache_key' => $cache_key,
 					'key_hash'  => $key_hash,
 					'bucket'    => $bucket,
@@ -4373,6 +4375,8 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 			return;
 		}
 
+		$started = microtime( true );
+
 		$this->record_prefetch_load_operation();
 
 		$values[] = time();
@@ -4388,11 +4392,15 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 		);
 		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
+		$elapsed = microtime( true ) - $started;
+
 		if ( ! is_array( $rows ) ) {
+			$this->record_database_prefetch_qm_operations( $requests, array(), $started, $elapsed );
 			return;
 		}
 
-		$now = time();
+		$loaded_values = array();
+		$now           = time();
 
 		foreach ( $rows as $row ) {
 			$lookup_key = strtolower( (string) $row['bucket_hash'] ) . ':' . (int) $row['generation'] . ':' . strtolower( (string) $row['key_hash'] );
@@ -4412,6 +4420,53 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 				'calculated_at' => $now,
 			);
 			$this->record_prefetch_loaded_key( $request['group'], $request['cache_key'] );
+			$loaded_values[ $lookup_key ] = $value['value'];
+		}
+
+		$this->record_database_prefetch_qm_operations( $requests, $loaded_values, $started, $elapsed );
+	}
+
+	/**
+	 * Records database prefetch hydration as logical get_multiple operations.
+	 *
+	 * @since 1.1.0
+	 *
+	 * @param array $requests      Prefetch request data.
+	 * @param array $loaded_values Values hydrated from the database, keyed by lookup key.
+	 * @param float $started       Operation start time from microtime( true ).
+	 * @param float $elapsed       Measured elapsed time.
+	 * @return void
+	 */
+	protected function record_database_prefetch_qm_operations( array $requests, array $loaded_values, float $started, float $elapsed ): void {
+		$groups = array();
+
+		foreach ( $requests as $lookup_key => $request ) {
+			$group   = (string) $request['group'];
+			$raw_key = isset( $request['raw_key'] ) && ( is_int( $request['raw_key'] ) || is_string( $request['raw_key'] ) ) ? $request['raw_key'] : (string) $request['cache_key'];
+
+			$groups[ $group ]['keys'][ (string) $raw_key ]   = $raw_key;
+			$groups[ $group ]['values'][ (string) $raw_key ] = false;
+
+			if ( array_key_exists( $lookup_key, $loaded_values ) ) {
+				$groups[ $group ]['values'][ (string) $raw_key ] = $loaded_values[ $lookup_key ];
+				$groups[ $group ]['hits'][ (string) $raw_key ]   = true;
+			}
+		}
+
+		$total_keys = 0;
+		foreach ( $groups as $group_data ) {
+			$total_keys += count( $group_data['keys'] );
+		}
+
+		foreach ( $groups as $group => $group_data ) {
+			$keys    = array_values( $group_data['keys'] );
+			$hits    = count( $group_data['hits'] ?? array() );
+			$misses  = max( 0, count( $keys ) - $hits );
+			$time    = $total_keys > 0 ? $elapsed * ( count( $keys ) / $total_keys ) : 0.0;
+			$message = sprintf( '%d hits, %d misses', $hits, $misses );
+
+			$this->group_ops[ $group ][] = sprintf( 'get_multiple (%d keys, %d hits, %d misses)', count( $keys ), $hits, $misses );
+			$this->record_qm_operation( 'get_multiple', $keys, (string) $group, $group_data['values'], $started, $message, $time );
 		}
 	}
 
