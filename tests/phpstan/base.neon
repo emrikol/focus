@@ -1,0 +1,53 @@
+# Base PHPStan configuration for FOCUS Object Cache.
+#
+# This is kept separate from the main PHPStan configuration file to match WordPress core's PHPStan layout.
+#
+# https://phpstan.org/config-reference
+
+includes:
+	- ../../vendor/szepeviktor/phpstan-wordpress/extension.neon
+
+parameters:
+	# Cache is stored locally, so it's available for CI.
+	tmpDir: ../../.cache/phpstan
+
+	# The Minimum PHP Version.
+	phpVersion:
+		min: 80000
+		max: 80499
+
+	# If it's not enforced by PHP we can't assume users are passing valid values.
+	treatPhpDocTypesAsCertain: false
+
+	# These config options are explained in https://phpstan.org/config-reference
+	checkFunctionNameCase: true
+	inferPrivatePropertyTypeFromConstructor: true
+
+	# Constants whose values may differ depending on the install.
+	dynamicConstantNames:
+		- ABSPATH
+		- WP_CACHE
+		- WP_CACHE_KEY_SALT
+		- WP_CONTENT_DIR
+		- WP_FOCUS_BACKEND
+		- WP_FOCUS_CACHE_PREFETCH
+		- WP_FOCUS_DATABASE_GC_BATCH_SIZE
+		- WP_FOCUS_DATABASE_MAX_VALUE_SIZE
+		- WP_FOCUS_DATABASE_PREFETCH_CHUNK_SIZE
+		- WP_FOCUS_MAXTTL
+		- WP_FOCUS_PREFETCH_TTL
+		- WP_PLUGIN_DIR
+		- WP_POST_REVISIONS
+
+	# What directories and files should be scanned.
+	paths:
+		- ../../focus.php
+		- ../../includes
+		- ../../tools
+
+	bootstrapFiles:
+		- bootstrap.php
+
+	scanFiles:
+		- stubs/query-monitor.stub
+		- stubs/wp-cli.stub

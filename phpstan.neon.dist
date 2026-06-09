@@ -1,0 +1,25 @@
+# PHPStan configuration for FOCUS Object Cache.
+#
+# To overload this configuration, copy this file to phpstan.neon and adjust as needed.
+#
+# https://phpstan.org/config-reference
+
+includes:
+	# The base configuration file for using PHPStan with the FOCUS codebase.
+	- tests/phpstan/base.neon
+
+parameters:
+	# https://phpstan.org/user-guide/rule-levels
+	level: 0
+	reportUnmatchedIgnoredErrors: true
+
+	ignoreErrors:
+		# Level 0:
+		- # The object-cache drop-in intentionally checks install/cron constants before WordPress helper functions may be available.
+			identifier: phpstanWP.wpConstant.fetch
+			path: includes/object-cache.php
+			count: 17
+		- # Database backend methods are implemented by FOCUS_Database_Object_Cache and guarded by is_database_backend().
+			identifier: method.notFound
+			path: includes/object-cache.php
+			count: 11

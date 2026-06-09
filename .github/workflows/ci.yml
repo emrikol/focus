@@ -57,6 +57,9 @@ jobs:
       - name: Check object cache API parity
         run: composer check:cache-api
 
+      - name: PHPStan static analysis
+        run: composer phpstan
+
       - name: Prepare CodeSniffer (if sniff)
         if: env.SNIFF == 'true'
         run: |

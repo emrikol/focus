@@ -27,8 +27,8 @@ class FOCUS_Query_Monitor {
 	 * @return void
 	 */
 	public static function register(): void {
-		add_filter( 'qm/collectors', array( __CLASS__, 'register_collectors' ), 10, 2 );
-		add_filter( 'qm/outputter/html', array( __CLASS__, 'register_outputters' ), 10, 2 );
+		add_filter( 'qm/collectors', array( __CLASS__, 'register_collectors' ) );
+		add_filter( 'qm/outputter/html', array( __CLASS__, 'register_outputters' ) );
 	}
 
 	/**

@@ -2,7 +2,9 @@ node_modules/
 vendor/
 composer.lock
 $WP_TESTS_DIR/
+/.cache
 /.phpunit.cache
+/phpstan.neon
 .DS_Store
 phpunit-single-output.txt
 phpunit-multisite-output.txt

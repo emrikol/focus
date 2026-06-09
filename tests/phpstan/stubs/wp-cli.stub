@@ -1,0 +1,8 @@
+<?php
+
+class WP_CLI {
+	/**
+	 * @param array<string, mixed> $assoc_args
+	 */
+	public static function add_command( string $name, callable $callable, array $assoc_args = array() ): void {}
+}

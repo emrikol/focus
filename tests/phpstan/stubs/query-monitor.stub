@@ -1,0 +1,70 @@
+<?php
+
+class QM_Data {}
+
+class QM_Collector {
+	/** @var string */
+	public $id;
+
+	/** @var QM_Data */
+	protected $data;
+
+	public function __construct() {
+		$this->data = new QM_Data();
+	}
+
+	public function id(): string {}
+
+	/** @return mixed */
+	public function name() {}
+
+	/** @return mixed */
+	public function process() {}
+
+	public function get_storage(): QM_Data {}
+
+	public function get_data(): QM_Data {}
+}
+
+class QM_Collectors {
+	public static function get( string $id ): ?QM_Collector {}
+}
+
+class QM_Output_Html {
+	/** @var QM_Collector */
+	protected $collector;
+
+	public function __construct( QM_Collector $collector ) {
+		$this->collector = $collector;
+	}
+
+	/** @return mixed */
+	public function name() {}
+
+	/** @return mixed */
+	public function output() {}
+
+	public function before_non_tabular_output(): void {}
+
+	public function after_non_tabular_output(): void {}
+
+	public function before_tabular_output(): void {}
+
+	public function after_tabular_output(): void {}
+
+	/**
+	 * @param array<string, mixed> $args
+	 * @return array<string, mixed>
+	 */
+	public function menu( array $args ): array {}
+
+	public function build_sorter( string $title ): string {}
+
+	/**
+	 * @param array<int|string, mixed> $values
+	 * @param array<string, mixed>    $args
+	 */
+	public function build_filter( string $key, array $values, string $title, array $args = array() ): string {}
+
+	public static function build_toggler(): string {}
+}
