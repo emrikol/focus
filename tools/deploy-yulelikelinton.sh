@@ -48,6 +48,41 @@ backup_path="${BACKUP_ROOT}/focus-${timestamp}"
 
 ssh "${SSH_OPTS[@]}" -n "${REMOTE}" "mkdir -p '${backup_path}' '${PLUGIN_PATH}' '${CONTENT_PATH}' && cp -a '${PLUGIN_PATH}' '${backup_path}/plugin' && cp -a '${CONTENT_PATH}/object-cache.php' '${backup_path}/object-cache.php'"
 
+ssh "${SSH_OPTS[@]}" "${REMOTE}" "SITE_PATH='${SITE_PATH}' bash" <<'BASH'
+set -euo pipefail
+
+cd "${SITE_PATH}"
+prefix="$(wp db prefix)"
+charset="DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci"
+
+wp db query "CREATE TABLE IF NOT EXISTS \`${prefix}focus_cache_items\` (
+	bucket_hash binary(16) NOT NULL,
+	key_hash binary(16) NOT NULL,
+	cache_key longtext NOT NULL,
+	cache_value longblob NOT NULL,
+	value_size int unsigned NOT NULL,
+	flags int unsigned NOT NULL DEFAULT 0,
+	expires_at bigint unsigned NOT NULL,
+	created_at bigint unsigned NOT NULL,
+	updated_at bigint unsigned NOT NULL,
+	PRIMARY KEY (bucket_hash, key_hash),
+	KEY expires_at (expires_at)
+) ${charset}"
+
+wp db query "CREATE TABLE IF NOT EXISTS \`${prefix}focus_cache_prefetch_keys\` (
+	request_hash binary(16) NOT NULL,
+	bucket_hash binary(16) NOT NULL,
+	key_hash binary(16) NOT NULL,
+	cache_group varchar(191) NOT NULL,
+	cache_key longtext NOT NULL,
+	expires_at bigint unsigned NOT NULL,
+	created_at bigint unsigned NOT NULL,
+	updated_at bigint unsigned NOT NULL,
+	PRIMARY KEY (request_hash, bucket_hash, key_hash),
+	KEY expires_at (expires_at)
+) ${charset}"
+BASH
+
 rsync -az --delete --delete-excluded \
 	-e "${RSYNC_SSH}" \
 	--exclude .git \
