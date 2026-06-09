@@ -120,6 +120,10 @@ if ( ! class_exists( 'QM_Collector' ) ) {
 		public function get_data() {
 			return $this->data;
 		}
+
+		public function id() {
+			return 'qm-' . $this->id;
+		}
 	}
 }
 
@@ -139,8 +143,28 @@ if ( ! class_exists( 'QM_Output_Html' ) ) {
 			echo '</div>';
 		}
 
+		protected function before_tabular_output() {
+			echo '<table>';
+		}
+
+		protected function after_tabular_output() {
+			echo '</table>';
+		}
+
 		protected function menu( array $args ) {
 			return $args;
+		}
+
+		protected function build_sorter( string $title ) {
+			return '<span class="sort">' . esc_html( $title ) . '</span>';
+		}
+
+		protected function build_filter( string $name, array $values, string $title, array $args = array() ) {
+			return '<span class="filter" data-name="' . esc_attr( $name ) . '">' . esc_html( $title ) . ':' . esc_html( (string) count( $values ) ) . ':' . esc_html( (string) count( $args ) ) . '</span>';
+		}
+
+		protected static function build_toggler() {
+			return '<button type="button">toggle</button>';
 		}
 	}
 }
@@ -258,148 +282,362 @@ class Tests_Focus_Admin extends WP_UnitTestCase {
 			$this->assertSame( 'Deactivate', $links['deactivate'] );
 		}
 
-		public function test_query_monitor_prefetch_collector_and_output() {
+		public function test_query_monitor_object_cache_panels_and_prefetch_subpanel() {
 			require_once dirname( __DIR__ ) . '/includes/class-focus-query-monitor.php';
+			require_once dirname( __DIR__ ) . '/includes/class-focus-qm-data-object-cache.php';
 			require_once dirname( __DIR__ ) . '/includes/class-focus-qm-data-prefetch.php';
+			require_once dirname( __DIR__ ) . '/includes/class-focus-qm-collector-object-cache.php';
+			require_once dirname( __DIR__ ) . '/includes/class-focus-qm-collector-object-cache-ops.php';
+			require_once dirname( __DIR__ ) . '/includes/class-focus-qm-collector-object-cache-group-stats.php';
+			require_once dirname( __DIR__ ) . '/includes/class-focus-qm-collector-object-cache-slow-ops.php';
 			require_once dirname( __DIR__ ) . '/includes/class-focus-qm-collector-prefetch.php';
+			require_once dirname( __DIR__ ) . '/includes/class-focus-qm-output-html-object-cache-base.php';
+			require_once dirname( __DIR__ ) . '/includes/class-focus-qm-output-html-object-cache.php';
+			require_once dirname( __DIR__ ) . '/includes/class-focus-qm-output-html-object-cache-ops.php';
+			require_once dirname( __DIR__ ) . '/includes/class-focus-qm-output-html-object-cache-group-stats.php';
+			require_once dirname( __DIR__ ) . '/includes/class-focus-qm-output-html-object-cache-slow-ops.php';
 			require_once dirname( __DIR__ ) . '/includes/class-focus-qm-output-html-prefetch.php';
 
 			global $wp_object_cache;
 
 			$original_cache = $wp_object_cache;
-			$original_prefetch_stats = $wp_object_cache->prefetch_stats ?? null;
-			$original_prefetched_keys = $wp_object_cache->prefetched_keys ?? null;
-			$original_prefetch_requested_keys = $wp_object_cache->prefetch_requested_keys ?? null;
-			$original_test_prefetch_enabled = $wp_object_cache->test_prefetch_enabled ?? null;
+
+			$prefetch = array(
+				'enabled'                  => true,
+				'backend'                  => 'database',
+				'key'                      => 'prefetch-key',
+				'manifest_found'           => true,
+				'manifest_groups'          => 1,
+				'manifest_keys'            => 3,
+				'requested_keys'           => 3,
+				'loaded_keys'              => 2,
+				'missing_keys'             => 1,
+				'used_keys'                => 1,
+				'unused_keys'              => 1,
+				'calls_saved'              => 1,
+				'net_calls_saved'          => 0,
+				'load_operations'          => 1,
+				'load_time'                => 0.001,
+				'estimated_time_saved'     => 0.0,
+				'saved_manifest_groups'    => 1,
+				'saved_manifest_keys'      => 3,
+				'saved_manifest_time'      => 0.001,
+				'saved_manifest_succeeded' => true,
+				'used_groups'              => array(
+					'qm_prefetch_group' => array( 'used_key' ),
+				),
+				'unused_groups'            => array(
+					'qm_prefetch_group' => array( 'unused_key' ),
+				),
+			);
+
+			$stats = array(
+				'totals'           => array(
+					'query_time' => 0.0123,
+					'size'       => 1234,
+				),
+				'operation_counts' => array(
+					'set'      => 4,
+					'get'      => 1,
+					'zero'     => 0,
+					'slow-ops' => 2,
+				),
+				'operations'       => array(
+					'set'              => array(
+						array(
+							'key'    => 'alpha',
+							'size'   => 100,
+							'time'   => 0.001,
+							'group'  => 'default',
+							'result' => 'stored',
+						),
+						array(
+							'key'    => array( 'single' ),
+							'size'   => 0,
+							'time'   => 0.002,
+							'group'  => 'default',
+							'result' => 'not_in_memcache',
+						),
+						array(
+							'key'    => array( 'first', 'second', 'third' ),
+							'size'   => 20,
+							'time'   => 0.003,
+							'group'  => 'default',
+							'result' => 'memcache',
+						),
+						array(
+							'key'    => array(),
+							'size'   => 30,
+							'time'   => 0.004,
+							'group'  => 'options',
+							'result' => '[mc already]',
+						),
+					),
+					'get'              => array(
+						array(
+							'key'    => 'beta',
+							'size'   => 10,
+							'time'   => 0.005,
+							'group'  => 'options',
+							'result' => '[lc already]',
+						),
+					),
+					'get_flush_number' => array(
+						array(
+							'key'    => 'skip',
+							'size'   => 999,
+							'time'   => 0.999,
+							'group'  => 'skip_group',
+							'result' => 'skip',
+						),
+					),
+					'bad'              => array( 'not-an-operation-row' ),
+				),
+				'groups'           => array( 'default', 'options' ),
+				'slow-ops'         => array(
+					'set' => array(
+						array(
+							'key'       => array( 'slow1', 'slow2' ),
+							'size'      => 100,
+							'time'      => 0.01,
+							'group'     => 'default',
+							'result'    => 'stored',
+							'backtrace' => 'Class->method, next_frame',
+						),
+						array(
+							'key'       => 'slow-empty-trace',
+							'size'      => 0,
+							'time'      => 0.02,
+							'group'     => 'options',
+							'result'    => 'not_found',
+							'backtrace' => '',
+						),
+					),
+				),
+				'slow-ops-groups'  => array( 'default', 'options' ),
+				'prefetch'         => $prefetch,
+			);
+
+			$wp_object_cache = new class( $stats ) { // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+				private array $stats;
+
+				public function __construct( array $stats ) {
+					$this->stats = $stats;
+				}
+
+				public function get_stats(): array {
+					return $this->stats;
+				}
+
+				public function get( $key, $group = 'default', $force = false, &$found = null ) {
+					$found = false;
+					return false;
+				}
+
+				public function set( $key, $data, $group = 'default', $expire = 0 ): bool {
+					return true;
+				}
+
+				public function add( $key, $data, $group = 'default', $expire = 0 ): bool {
+					return true;
+				}
+
+				public function stats(): void {
+					echo '<h2>Legacy Stats</h2>';
+				}
+			};
 
 			try {
-				$empty_collector = new FOCUS_QM_Collector_Prefetch();
-				$this->assertSame( 'FOCUS Prefetch', $empty_collector->name() );
-				$this->assertInstanceOf( QM_Data::class, $empty_collector->get_storage() );
+				foreach (
+					array(
+						new FOCUS_QM_Collector_Object_Cache(),
+						new FOCUS_QM_Collector_Object_Cache_Ops(),
+						new FOCUS_QM_Collector_Object_Cache_Group_Stats(),
+						new FOCUS_QM_Collector_Object_Cache_Slow_Ops(),
+						new FOCUS_QM_Collector_Prefetch(),
+					) as $collector
+				) {
+					$this->assertInstanceOf( QM_Data::class, $collector->get_storage() );
+				}
+
+				$this->assertSame( 'Object Cache', ( new FOCUS_QM_Collector_Object_Cache() )->name() );
+				$this->assertSame( 'Operations', ( new FOCUS_QM_Collector_Object_Cache_Ops() )->name() );
+				$this->assertSame( 'Group Stats', ( new FOCUS_QM_Collector_Object_Cache_Group_Stats() )->name() );
+				$this->assertSame( 'Slow Operations', ( new FOCUS_QM_Collector_Object_Cache_Slow_Ops() )->name() );
+				$this->assertSame( 'Prefetch', ( new FOCUS_QM_Collector_Prefetch() )->name() );
 
 				$wp_object_cache = new stdClass(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
-				$empty_collector->process();
-				$this->assertSame( array(), $empty_collector->get_data()->prefetch );
+				$empty_collectors = FOCUS_Query_Monitor::register_collectors( array() );
+				foreach ( $empty_collectors as $empty_collector ) {
+					$empty_collector->process();
+				}
+				$this->assertSame( array(), $empty_collectors['object_cache']->get_data()->totals );
+				$this->assertSame( array(), $empty_collectors['object_cache_prefetch']->get_data()->prefetch );
 
-				$wp_object_cache = $original_cache; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
-				$wp_object_cache->test_prefetch_enabled = true;
-				$wp_object_cache->prefetch_requested_keys = array(
-					'qm_prefetch_group' => array(
-						'used_key' => 'used_key',
-						'unused_key' => 'unused_key',
-						'missing_key' => 'missing_key',
-					),
-				);
-				$wp_object_cache->prefetched_keys = array(
-					'qm_prefetch_group' => array(
-						'used_key' => true,
-						'unused_key' => false,
-					),
-				);
-				$wp_object_cache->prefetch_stats = array_merge(
-					$wp_object_cache->prefetch_stats,
-					array(
-						'enabled'                  => true,
-						'backend'                  => 'file',
-						'key'                      => 'prefetch-key',
-						'manifest_found'           => true,
-						'manifest_groups'          => 1,
-						'manifest_keys'            => 3,
-						'requested_keys'           => 3,
-						'loaded_keys'              => 2,
-						'missing_keys'             => 1,
-						'used_keys'                => 1,
-						'unused_keys'              => 1,
-						'calls_saved'              => 1,
-						'net_calls_saved'          => 0,
-						'load_operations'          => 1,
-						'load_time'                => 0.001,
-						'estimated_time_saved'     => 0.0,
-						'saved_manifest_groups'    => 1,
-						'saved_manifest_keys'      => 3,
-						'saved_manifest_time'      => 0.001,
-						'saved_manifest_succeeded' => true,
-					)
-				);
+				$wp_object_cache = new class( $stats ) { // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+					private array $stats;
 
-				$collector = new FOCUS_QM_Collector_Prefetch();
-				$this->assertInstanceOf( FOCUS_QM_Data_Prefetch::class, $collector->get_storage() );
-				$collector->process();
-				$this->assertSame( 'file', $collector->get_data()->prefetch['backend'] );
+					public function __construct( array $stats ) {
+						$this->stats = $stats;
+					}
+
+					public function get_stats(): array {
+						return $this->stats;
+					}
+
+					public function get( $key, $group = 'default', $force = false, &$found = null ) {
+						$found = false;
+						return false;
+					}
+
+					public function set( $key, $data, $group = 'default', $expire = 0 ): bool {
+						return true;
+					}
+
+					public function add( $key, $data, $group = 'default', $expire = 0 ): bool {
+						return true;
+					}
+
+					public function stats(): void {
+						echo '<h2>Legacy Stats</h2>';
+					}
+				};
 
 				FOCUS_Query_Monitor::register();
 				$this->assertNotFalse( has_filter( 'qm/collectors', array( 'FOCUS_Query_Monitor', 'register_collectors' ) ) );
 				$this->assertNotFalse( has_filter( 'qm/outputter/html', array( 'FOCUS_Query_Monitor', 'register_outputters' ) ) );
 
 				$collectors = FOCUS_Query_Monitor::register_collectors( array() );
-				$this->assertInstanceOf( FOCUS_QM_Collector_Prefetch::class, $collectors['focus_prefetch'] );
+				$this->assertInstanceOf( FOCUS_QM_Collector_Object_Cache::class, $collectors['object_cache'] );
+				$this->assertInstanceOf( FOCUS_QM_Collector_Object_Cache_Ops::class, $collectors['object_cache_ops'] );
+				$this->assertInstanceOf( FOCUS_QM_Collector_Object_Cache_Group_Stats::class, $collectors['object_cache_group_stats'] );
+				$this->assertInstanceOf( FOCUS_QM_Collector_Object_Cache_Slow_Ops::class, $collectors['object_cache_slow_ops'] );
+				$this->assertInstanceOf( FOCUS_QM_Collector_Prefetch::class, $collectors['object_cache_prefetch'] );
+
+				foreach ( $collectors as $collector ) {
+					$collector->process();
+				}
+
+				$this->assertSame( $stats['totals'], $collectors['object_cache']->get_data()->totals );
+				$this->assertArrayHasKey( 'set', $collectors['object_cache_group_stats']->get_data()->group_stats );
+				$this->assertArrayNotHasKey( 'get_flush_number', $collectors['object_cache_group_stats']->get_data()->group_stats );
+				$this->assertSame( 'database', $collectors['object_cache_prefetch']->get_data()->prefetch['backend'] );
 
 				QM_Collectors::$collectors = array();
 				$this->assertSame( array(), FOCUS_Query_Monitor::register_outputters( array() ) );
 
 				QM_Collectors::$collectors = $collectors;
 				$outputters = FOCUS_Query_Monitor::register_outputters( array() );
-				$this->assertInstanceOf( FOCUS_QM_Output_Html_Prefetch::class, $outputters['focus_prefetch'] );
+				$this->assertInstanceOf( FOCUS_QM_Output_Html_Object_Cache::class, $outputters['object_cache'] );
+				$this->assertInstanceOf( FOCUS_QM_Output_Html_Object_Cache_Ops::class, $outputters['object_cache_ops'] );
+				$this->assertInstanceOf( FOCUS_QM_Output_Html_Object_Cache_Group_Stats::class, $outputters['object_cache_group_stats'] );
+				$this->assertInstanceOf( FOCUS_QM_Output_Html_Object_Cache_Slow_Ops::class, $outputters['object_cache_slow_ops'] );
+				$this->assertInstanceOf( FOCUS_QM_Output_Html_Prefetch::class, $outputters['object_cache_prefetch'] );
+				$this->assertSame( 'Object Cache', $outputters['object_cache']->name() );
 
-				$outputter = new FOCUS_QM_Output_Html_Prefetch( $collector );
-				$this->assertContains( 'qm-focus-prefetch', $outputter->admin_class( array() ) );
+				$menu = $outputters['object_cache']->admin_menu( array() );
+				$this->assertSame( 'object_cache', $menu['object_cache']['id'] );
 
-				$menu = $outputter->panel_menu(
-					array(
-						'cache' => array(
-							'children' => array(),
-						),
-					)
+				$panel_menu = array(
+					'object_cache' => array(
+						'children' => array(),
+					),
 				);
-				$this->assertSame( 'qm-focus_prefetch', $menu['cache']['children'][0]['id'] );
+				$panel_menu = $outputters['object_cache_ops']->panel_menu( $panel_menu );
+				$panel_menu = $outputters['object_cache_group_stats']->panel_menu( $panel_menu );
+				$panel_menu = $outputters['object_cache_slow_ops']->panel_menu( $panel_menu );
+				$panel_menu = $outputters['object_cache_prefetch']->panel_menu( $panel_menu );
+				$this->assertSame( 'qm-object_cache_ops', $panel_menu['object_cache']['children'][0]['id'] );
+				$this->assertSame( 'qm-object_cache_group_stats', $panel_menu['object_cache']['children'][1]['id'] );
+				$this->assertSame( 'qm-object_cache_slow_ops', $panel_menu['object_cache']['children'][2]['id'] );
+				$this->assertSame( 'qm-object_cache_prefetch', $panel_menu['object_cache']['children'][3]['id'] );
+				$this->assertSame( array(), $outputters['object_cache_prefetch']->panel_menu( array() ) );
 
-				$menu = $outputter->panel_menu(
-					array(
-						'object_cache' => array(
-							'children' => array(),
-						),
-					)
+				$empty_slow = new FOCUS_QM_Collector_Object_Cache_Slow_Ops();
+				$empty_slow_outputter = new FOCUS_QM_Output_Html_Object_Cache_Slow_Ops( $empty_slow );
+				$this->assertSame(
+					array( 'object_cache' => array( 'children' => array() ) ),
+					$empty_slow_outputter->panel_menu( array( 'object_cache' => array( 'children' => array() ) ) )
 				);
-				$this->assertSame( 'qm-focus_prefetch', $menu['object_cache']['children'][0]['id'] );
 
-				$fallback_menu = $outputter->panel_menu( array() );
-				$this->assertSame( 'qm-focus_prefetch', $fallback_menu['focus_prefetch']['id'] );
+				$this->assertContains( 'qm-object_cache', $outputters['object_cache']->admin_class( array() ) );
+				$this->assertContains( 'qm-object_cache_ops', $outputters['object_cache_ops']->admin_class( array() ) );
+				$this->assertContains( 'qm-object_cache_group_stats', $outputters['object_cache_group_stats']->admin_class( array() ) );
+				$this->assertContains( 'qm-object_cache_slow_ops', $outputters['object_cache_slow_ops']->admin_class( array() ) );
+				$this->assertContains( 'qm-object_cache_prefetch', $outputters['object_cache_prefetch']->admin_class( array() ) );
 
 				ob_start();
-				$outputter->output();
-				$output = ob_get_clean();
+				$outputters['object_cache']->output();
+				$object_output = ob_get_clean();
+				$this->assertStringContainsString( 'Totals', $object_output );
+				$this->assertStringContainsString( 'Query Time', $object_output );
+				$this->assertStringContainsString( 'Operation Counts', $object_output );
+				$this->assertStringNotContainsString( '>zero<', $object_output );
 
-				$this->assertStringContainsString( 'Prefetch Summary', $output );
-				$this->assertStringContainsString( 'Individual Calls Avoided', $output );
-				$this->assertStringContainsString( 'Prefetched And Used', $output );
-				$this->assertStringContainsString( 'Prefetched But Unused', $output );
-				$this->assertStringContainsString( 'unused_key', $output );
-
-				$empty_outputter = new FOCUS_QM_Output_Html_Prefetch( new FOCUS_QM_Collector_Prefetch() );
 				ob_start();
-				$empty_outputter->output();
+				$outputters['object_cache_ops']->output();
+				$ops_output = ob_get_clean();
+				$this->assertStringContainsString( 'Operation', $ops_output );
+				$this->assertStringContainsString( '[+2 more]', $ops_output );
+				$this->assertStringContainsString( 'Not in Memcached', $ops_output );
+				$this->assertStringContainsString( 'Found in Memcached', $ops_output );
+				$this->assertStringContainsString( 'Already in Memcached', $ops_output );
+				$this->assertStringContainsString( 'Local cache already', $ops_output );
+				$this->assertStringContainsString( 'Total:', $ops_output );
+
+				$collectors['object_cache_group_stats']->data->group_stats['bad'] = array(
+					'bad_group' => 'not-an-array',
+				);
+				ob_start();
+				$outputters['object_cache_group_stats']->output();
+				$group_output = ob_get_clean();
+				$this->assertStringContainsString( 'Group Stats for set', $group_output );
+				$this->assertStringContainsString( 'Totals:', $group_output );
+				$this->assertStringContainsString( 'default', $group_output );
+				$this->assertStringNotContainsString( 'skip_group', $group_output );
+				$this->assertStringNotContainsString( 'bad_group', $group_output );
+
+				$collectors['object_cache_slow_ops']->data->slow_ops['bad'] = array( 'not-an-array' );
+				ob_start();
+				$outputters['object_cache_slow_ops']->output();
+				$slow_output = ob_get_clean();
+				$this->assertStringContainsString( 'Backtrace', $slow_output );
+				$this->assertStringContainsString( 'slow1', $slow_output );
+				$this->assertStringContainsString( 'Class-&gt;method', $slow_output );
+
+				ob_start();
+				$outputters['object_cache_prefetch']->output();
+				$prefetch_output = ob_get_clean();
+				$this->assertStringContainsString( 'Prefetch Summary', $prefetch_output );
+				$this->assertStringContainsString( 'Individual Calls Avoided', $prefetch_output );
+				$this->assertStringContainsString( 'Prefetched And Used', $prefetch_output );
+				$this->assertStringContainsString( 'Prefetched But Unused', $prefetch_output );
+				$this->assertStringContainsString( 'unused_key', $prefetch_output );
+
+				$empty_prefetch_outputter = new FOCUS_QM_Output_Html_Prefetch( new FOCUS_QM_Collector_Prefetch() );
+				ob_start();
+				$empty_prefetch_outputter->output();
 				$this->assertSame( '', ob_get_clean() );
 
-				$collector->data->prefetch['used_groups'] = array();
-				$collector->data->prefetch['unused_groups'] = array();
+				$collectors['object_cache_prefetch']->data->prefetch['used_groups'] = array();
+				$collectors['object_cache_prefetch']->data->prefetch['unused_groups'] = array();
 				ob_start();
-				$outputter->output();
+				$outputters['object_cache_prefetch']->output();
 				$summary_only_output = ob_get_clean();
 				$this->assertStringContainsString( 'Prefetch Summary', $summary_only_output );
 				$this->assertStringNotContainsString( 'Prefetched But Unused', $summary_only_output );
+
+				$fallback_outputter = new FOCUS_QM_Output_Html_Object_Cache( new FOCUS_QM_Collector_Object_Cache() );
+				$wp_object_cache = new class() { // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+					public function stats(): void {
+						echo '<h2>Legacy Stats</h2>';
+					}
+				};
+				ob_start();
+				$fallback_outputter->output();
+				$fallback_output = ob_get_clean();
+				$this->assertStringContainsString( 'Legacy Stats', $fallback_output );
 			} finally {
-				if ( null !== $original_prefetch_stats && isset( $original_cache->prefetch_stats ) ) {
-					$original_cache->prefetch_stats = $original_prefetch_stats;
-				}
-				if ( null !== $original_prefetched_keys && isset( $original_cache->prefetched_keys ) ) {
-					$original_cache->prefetched_keys = $original_prefetched_keys;
-				}
-				if ( null !== $original_prefetch_requested_keys && isset( $original_cache->prefetch_requested_keys ) ) {
-					$original_cache->prefetch_requested_keys = $original_prefetch_requested_keys;
-				}
-				if ( null !== $original_test_prefetch_enabled && isset( $original_cache->test_prefetch_enabled ) ) {
-					$original_cache->test_prefetch_enabled = $original_test_prefetch_enabled;
-				}
 				$wp_object_cache = $original_cache; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 				QM_Collectors::$collectors = array();
 				remove_filter( 'qm/collectors', array( 'FOCUS_Query_Monitor', 'register_collectors' ), 10 );

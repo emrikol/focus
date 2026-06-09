@@ -189,8 +189,18 @@ class FOCUS_Cache {
 		// @codeCoverageIgnoreEnd
 
 		require_once __DIR__ . '/class-focus-query-monitor.php';
+		require_once __DIR__ . '/class-focus-qm-data-object-cache.php';
 		require_once __DIR__ . '/class-focus-qm-data-prefetch.php';
+		require_once __DIR__ . '/class-focus-qm-collector-object-cache.php';
+		require_once __DIR__ . '/class-focus-qm-collector-object-cache-ops.php';
+		require_once __DIR__ . '/class-focus-qm-collector-object-cache-group-stats.php';
+		require_once __DIR__ . '/class-focus-qm-collector-object-cache-slow-ops.php';
 		require_once __DIR__ . '/class-focus-qm-collector-prefetch.php';
+		require_once __DIR__ . '/class-focus-qm-output-html-object-cache-base.php';
+		require_once __DIR__ . '/class-focus-qm-output-html-object-cache.php';
+		require_once __DIR__ . '/class-focus-qm-output-html-object-cache-ops.php';
+		require_once __DIR__ . '/class-focus-qm-output-html-object-cache-group-stats.php';
+		require_once __DIR__ . '/class-focus-qm-output-html-object-cache-slow-ops.php';
 		require_once __DIR__ . '/class-focus-qm-output-html-prefetch.php';
 
 		FOCUS_Query_Monitor::register();

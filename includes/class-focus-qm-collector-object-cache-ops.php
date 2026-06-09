@@ -1,6 +1,6 @@
 <?php
 /**
- * Query Monitor collector for FOCUS prefetch stats.
+ * Query Monitor collector for FOCUS object cache operations.
  *
  * @package WordPress
  */
@@ -18,18 +18,18 @@ if ( ! class_exists( 'QM_Collector' ) || ! class_exists( 'QM_Data' ) ) {
 // @codeCoverageIgnoreEnd
 
 /**
- * Collects FOCUS prefetch stats from the object-cache drop-in.
+ * Collects FOCUS object cache operation rows.
  *
  * @since 1.1.0
  */
-class FOCUS_QM_Collector_Prefetch extends QM_Collector {
+class FOCUS_QM_Collector_Object_Cache_Ops extends QM_Collector {
 	/**
-	 * Collector ID.
+	 * Collector ID. Matches VIP's Query Monitor object-cache operations panel.
 	 *
 	 * @since 1.1.0
 	 * @var string
 	 */
-	public $id = 'object_cache_prefetch';
+	public $id = 'object_cache_ops';
 
 	/**
 	 * Returns the collector label.
@@ -39,7 +39,7 @@ class FOCUS_QM_Collector_Prefetch extends QM_Collector {
 	 * @return string Collector label.
 	 */
 	public function name() {
-		return __( 'Prefetch', 'focus-cache' );
+		return __( 'Operations', 'focus-cache' );
 	}
 
 	/**
@@ -50,11 +50,11 @@ class FOCUS_QM_Collector_Prefetch extends QM_Collector {
 	 * @return QM_Data Storage object.
 	 */
 	public function get_storage(): QM_Data {
-		return new FOCUS_QM_Data_Prefetch();
+		return new FOCUS_QM_Data_Object_Cache();
 	}
 
 	/**
-	 * Collects prefetch stats.
+	 * Collects object cache operation rows.
 	 *
 	 * @since 1.1.0
 	 *
@@ -67,7 +67,9 @@ class FOCUS_QM_Collector_Prefetch extends QM_Collector {
 			return;
 		}
 
-		$stats                = $wp_object_cache->get_stats();
-		$this->data->prefetch = $stats['prefetch'] ?? array();
+		$stats = $wp_object_cache->get_stats();
+
+		$this->data->operations = $stats['operations'] ?? array();
+		$this->data->groups     = $stats['groups'] ?? array();
 	}
 }
