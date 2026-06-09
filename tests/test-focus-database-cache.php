@@ -67,6 +67,19 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 		$cache = new FOCUS_Database_Object_Cache();
 		$cache->configure_backend( 'database' );
 
+		if ( ! $cache->install_database_tables() ) {
+			$this->fail(
+				sprintf(
+					'The FOCUS database backend schema could not be installed. Last DB error: %s. Last query: %s. Tables: %s, %s, %s.',
+					(string) $wpdb->last_error,
+					(string) $wpdb->last_query,
+					$cache->database_buckets_table,
+					$cache->database_items_table,
+					$cache->database_meta_table
+				)
+			);
+		}
+
 		if ( ! $cache->is_database_backend() ) {
 			$this->fail(
 				sprintf(
@@ -131,6 +144,11 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 	public function test_database_backend_installs_schema_and_sets_backend() {
 		global $wpdb;
 
+		$runtime_cache = new FOCUS_Database_Object_Cache();
+		$runtime_cache->configure_backend( 'database' );
+		$this->assertSame( 'database', $runtime_cache->backend );
+		$this->assertFalse( $runtime_cache->database_schema_checked );
+
 		$cache = $this->init_database_cache();
 
 		$this->assertSame( 'database', $cache->backend );
@@ -146,6 +164,8 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 	}
 
 	public function test_database_backend_get_set_false_value_delete_and_expiration() {
+		global $wpdb;
+
 		$cache = $this->init_database_cache();
 		$group = 'database_get_set';
 		$found = null;
@@ -160,8 +180,15 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 
 			$this->assertTrue( $cache->set( 'scalar_key', 'scalar_value', $group ) );
 			$cache->flush_runtime();
+			$query_count = $wpdb->num_queries;
 			$this->assertSame( 'scalar_value', $cache->get( 'scalar_key', $group, false, $found ) );
 			$this->assertTrue( $found );
+			$this->assertSame( 1, $wpdb->num_queries - $query_count );
+
+			$query_count = $wpdb->num_queries;
+			$this->assertSame( 'scalar_value', $cache->get( 'scalar_key', $group, false, $found ) );
+			$this->assertTrue( $found );
+			$this->assertSame( 0, $wpdb->num_queries - $query_count );
 
 			$this->assertTrue( $cache->set( 'short_key', 'short_value', $group, 1 ) );
 			sleep( 2 );
@@ -337,6 +364,7 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 		$get_expiration = $this->get_protected_method( $cache, 'get_expiration' );
 		$load_from_database = $this->get_protected_method( $cache, 'load_from_database' );
 
+		$this->assertTrue( $cache->set( 'memory_key', 'memory_value', 'database_no_wpdb' ) );
 		$this->assertTrue( $schema_current->invoke( $cache ) );
 		$this->assertTrue( $tables_exist->invoke( $cache ) );
 
@@ -346,6 +374,9 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 
 			$this->assertFalse( $schema_current->invoke( $cache ) );
 			$this->assertSame( 0, $get_expiration->invoke( $cache, 'missing', 'database_no_wpdb' ) );
+			$found = null;
+			$this->assertSame( 'memory_value', $cache->get( 'memory_key', 'database_no_wpdb', false, $found ) );
+			$this->assertTrue( $found );
 
 			$found = true;
 			$this->assertFalse( $load_from_database->invokeArgs( $cache, array( 'missing', 'database_no_wpdb', &$found ) ) );

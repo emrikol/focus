@@ -72,10 +72,14 @@ if ( ! defined( 'WP_FOCUS_BACKEND' ) ) {
 }
 
 /**
- * Allows the database backend to create its tables when first selected.
+ * Allows the database backend to validate/install tables during drop-in load.
+ *
+ * Runtime schema checks add database queries to every request. FOCUS installs
+ * and upgrades database tables from plugin activation, explicit admin actions,
+ * and deployment tooling by default.
  */
 if ( ! defined( 'WP_FOCUS_DATABASE_AUTO_INSTALL' ) ) {
-	define( 'WP_FOCUS_DATABASE_AUTO_INSTALL', true );
+	define( 'WP_FOCUS_DATABASE_AUTO_INSTALL', false );
 }
 
 /**
@@ -2890,44 +2894,14 @@ class WP_Object_Cache {
 		// Check if we have a cached expiration result from this request.
 		if ( isset( $this->expiration_cache[ $cache_key ] ) ) {
 			$cached_data = $this->expiration_cache[ $cache_key ];
-			// Use cached result if it's from the same second (transaction-level caching).
-			if ( $current_time === $cached_data['calculated_at'] ) {
+			// Database expirations are fetched with the value and are safe to reuse for the request.
+			if ( $this->is_database_backend() || $current_time === $cached_data['calculated_at'] ) {
 				return ( $cached_data['mtime'] - $current_time );
 			}
 		}
 
 		if ( $this->is_database_backend() ) {
-			global $wpdb;
-
-			if ( ! isset( $wpdb ) || ! is_object( $wpdb ) ) {
-				return 0;
-			}
-
-			$identity    = $this->get_database_bucket_identity( $group );
-			$items_table = $this->database_items_table;
-			$buckets     = $this->database_buckets_table;
-			$key_hash    = md5( (string) $key );
-
-			// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-			$expires_at = $wpdb->get_var(
-				$wpdb->prepare(
-					"SELECT i.expires_at FROM `{$items_table}` i INNER JOIN `{$buckets}` b ON b.bucket_hash = i.bucket_hash AND b.generation = i.generation WHERE i.bucket_hash = UNHEX(%s) AND i.key_hash = UNHEX(%s) LIMIT 1",
-					$identity['bucket_hash'],
-					$key_hash
-				)
-			);
-			// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-
-			if ( null === $expires_at ) {
-				return 0;
-			}
-
-			$this->expiration_cache[ $cache_key ] = array(
-				'mtime'         => (int) $expires_at,
-				'calculated_at' => $current_time,
-			);
-
-			return ( (int) $expires_at - $current_time );
+			return 0;
 		}
 
 		if ( $this->focus_file_exists( $key, $group ) ) {
@@ -3760,8 +3734,14 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 		}
 
 		$this->set_database_table_names();
-		$this->database_available      = WP_FOCUS_DATABASE_AUTO_INSTALL ? $this->database_schema_current() || $this->install_database_tables() : $this->database_tables_exist();
-		$this->database_schema_checked = true;
+		$this->database_available = '' !== $this->database_buckets_table && '' !== $this->database_items_table && '' !== $this->database_meta_table;
+
+		// @codeCoverageIgnoreStart
+		if ( $this->database_available && WP_FOCUS_DATABASE_AUTO_INSTALL ) {
+			$this->database_available      = $this->database_schema_current() || $this->install_database_tables();
+			$this->database_schema_checked = true;
+		}
+		// @codeCoverageIgnoreEnd
 
 		if ( $this->database_available ) {
 			$this->backend = 'database';
@@ -3870,7 +3850,18 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 		);
 		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
-		return false !== $bucket_result && false !== $item_result && false !== $meta_result && false !== $schema_result;
+		$result = false !== $bucket_result && false !== $item_result && false !== $meta_result && false !== $schema_result;
+
+		$this->database_schema_checked = true;
+
+		if ( $result ) {
+			$this->database_available = true;
+			if ( 'database' === $this->requested_backend ) {
+				$this->backend = 'database';
+			}
+		}
+
+		return $result;
 	}
 
 	/**

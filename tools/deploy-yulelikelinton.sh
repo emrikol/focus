@@ -113,6 +113,8 @@ if ( false === file_put_contents( $path, $contents ) ) {
 }
 PHP
 
+ssh "${SSH_OPTS[@]}" -n "${REMOTE}" "cd '${SITE_PATH}' && wp eval 'global \$wp_object_cache; if ( ! isset( \$wp_object_cache ) || ! is_object( \$wp_object_cache ) || ! method_exists( \$wp_object_cache, \"install_database_tables\" ) || ! \$wp_object_cache->install_database_tables() ) { fwrite( STDERR, \"Unable to install FOCUS database schema.\\n\" ); exit( 1 ); }'"
+
 ssh "${SSH_OPTS[@]}" -n "${REMOTE}" "php -l '${CONTENT_PATH}/object-cache.php' && php -l '${PLUGIN_PATH}/focus.php' && php -l '${PLUGIN_PATH}/includes/class-focus-cache.php'"
 
 printf 'Deployed FOCUS to %s:%s\n' "${REMOTE}" "${SITE_PATH}"
