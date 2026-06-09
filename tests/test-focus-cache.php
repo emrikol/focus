@@ -1707,6 +1707,16 @@ class Tests_Focus_Cache extends WP_UnitTestCase {
 		$this->assertFalse( $found );
 		$this->assertFileDoesNotExist( $empty_file );
 
+		$this->cache->set( 'empty_file', 'value', $group );
+		$empty_file_key = $this->cache->key( 'empty_file', $group );
+		$empty_file_path = $method->invoke( $this->cache, $empty_file_key, $group );
+		file_put_contents( $empty_file_path, '' );
+		unset( $this->cache->cache[ $group ][ $empty_file_key ] );
+
+		$this->assertFalse( $this->cache->get( 'empty_file', $group, false, $found ) );
+		$this->assertFalse( $found );
+		$this->assertFileDoesNotExist( $empty_file_path );
+
 		$this->cache->set( 'invalid_payload', 'value', $group );
 		$invalid_key = $this->cache->key( 'invalid_payload', $group );
 		$invalid_file = $method->invoke( $this->cache, $invalid_key, $group );
@@ -1725,6 +1735,8 @@ class Tests_Focus_Cache extends WP_UnitTestCase {
 		$group = 'test_corrupted_get_multiple';
 		$method = new ReflectionMethod( $this->cache, 'get_focus_file' );
 		$method->setAccessible( true );
+		$load_method = new ReflectionMethod( $this->cache, 'load_from_disk' );
+		$load_method->setAccessible( true );
 
 		$this->cache->set( 'expired_key', 'value', $group, 1 );
 		$expired_key = $this->cache->key( 'expired_key', $group );
@@ -1740,6 +1752,9 @@ class Tests_Focus_Cache extends WP_UnitTestCase {
 		$invalid_key = $this->cache->key( 'invalid_key', $group );
 		$invalid_file = $method->invoke( $this->cache, $invalid_key, $group );
 		file_put_contents( $invalid_file, $this->cache->cache_serial_header . 'not-serialized' . $this->cache->cache_serial_footer );
+
+		$this->assertFalse( $load_method->invoke( $this->cache, $empty_key, $group ) );
+		$this->assertFalse( $load_method->invoke( $this->cache, $invalid_key, $group ) );
 
 		$fresh_cache = $this->init_cache();
 		$results = $fresh_cache->get_multiple( array( 'expired_key', 'empty_key', 'invalid_key' ), $group, true );
@@ -2153,28 +2168,6 @@ class Tests_Focus_Cache extends WP_UnitTestCase {
 		$this->assertNotFalse( $key1, 'Domain 1 should generate a valid prefetch key' );
 		$this->assertNotFalse( $key2, 'Domain 2 should generate a valid prefetch key' );
 		$this->assertNotEquals( $key1, $key2, 'Different domains should generate different prefetch keys' );
-	}
-
-	/**
-	 * Test the old preload method names delegate to the prefetch implementation.
-	 */
-	public function test_legacy_preload_wrappers_delegate_to_prefetch() {
-		$this->enable_prefetch_for_testing();
-		$this->set_prefetch_request_context( 'example.com', '/legacy-preload' );
-
-		$group = 'test_legacy_preload';
-		$this->cache->set( 'legacy_key', 'legacy_value', $group );
-
-		$prefetch_key = $this->cache->get_prefetch_key();
-
-		$this->assertSame( $prefetch_key, $this->cache->get_preload_key() );
-
-		$this->cache->save_preload_cache();
-		$manifest = $this->get_prefetch_manifest( $this->cache, $prefetch_key );
-
-		$this->assertIsArray( $manifest );
-		$this->assertArrayHasKey( $group, $manifest['groups'] );
-		$this->assertContains( $this->cache->key( 'legacy_key', $group ), $manifest['groups'][ $group ] );
 	}
 
 	/**

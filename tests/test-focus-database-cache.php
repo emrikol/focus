@@ -40,11 +40,31 @@ class Tests_Focus_Database_Mismatched_Results_Wpdb_Double {
 		return array(
 			array(
 				'bucket_hash' => strtoupper( md5( 'unexpected_bucket' ) ),
-				'generation' => 999,
 				'key_hash' => strtoupper( md5( 'unexpected_key' ) ),
 				'cache_key' => 'unexpected_key',
 				'cache_value' => serialize( 'unexpected_value' ), // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize
 				'expires_at' => time() + 300,
+			),
+		);
+	}
+}
+
+class Tests_Focus_Database_Query_Failure_Wpdb_Double {
+	public function prepare( string $query, mixed ...$args ): string {
+		unset( $args );
+		return $query;
+	}
+
+	public function query( string $query ): bool {
+		unset( $query );
+		return false;
+	}
+
+	public function get_results( string $query, string $output = OBJECT ): array {
+		unset( $query, $output );
+		return array(
+			array(
+				'key_hash' => strtoupper( md5( 'missing' ) ),
 			),
 		);
 	}
@@ -70,12 +90,10 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 		if ( ! $cache->install_database_tables() ) {
 			$this->fail(
 				sprintf(
-					'The FOCUS database backend schema could not be installed. Last DB error: %s. Last query: %s. Tables: %s, %s, %s.',
+					'The FOCUS database backend schema could not be installed. Last DB error: %s. Last query: %s. Table: %s.',
 					(string) $wpdb->last_error,
 					(string) $wpdb->last_query,
-					$cache->database_buckets_table,
-					$cache->database_items_table,
-					$cache->database_meta_table
+					$cache->database_items_table
 				)
 			);
 		}
@@ -83,12 +101,10 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 		if ( ! $cache->is_database_backend() ) {
 			$this->fail(
 				sprintf(
-					'The FOCUS database backend did not initialize. Last DB error: %s. Last query: %s. Tables: %s, %s, %s.',
+					'The FOCUS database backend did not initialize. Last DB error: %s. Last query: %s. Table: %s.',
 					(string) $wpdb->last_error,
 					(string) $wpdb->last_query,
-					$cache->database_buckets_table,
-					$cache->database_items_table,
-					$cache->database_meta_table
+					$cache->database_items_table
 				)
 			);
 		}
@@ -106,15 +122,14 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 		return $reflection;
 	}
 
-	private function get_database_bucket( FOCUS_Database_Object_Cache $cache, string $group, bool $create = true ): array|false {
-		return $this->get_protected_method( $cache, 'get_database_bucket' )->invoke( $cache, $group, $create );
+	private function get_database_bucket_identity( FOCUS_Database_Object_Cache $cache, string $group ): array {
+		return $this->get_protected_method( $cache, 'get_database_bucket_identity' )->invoke( $cache, $group );
 	}
 
 	private function insert_raw_database_item( FOCUS_Database_Object_Cache $cache, string $group, string $key, string $serialized_value, int $ttl = 300 ): string {
 		global $wpdb;
 
-		$bucket = $this->get_database_bucket( $cache, $group, true );
-		$this->assertIsArray( $bucket );
+		$identity = $this->get_database_bucket_identity( $cache, $group );
 
 		$cache_key  = $cache->key( $key, $group );
 		$table      = $cache->database_items_table;
@@ -123,11 +138,10 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 
 		$wpdb->query(
 			$wpdb->prepare(
-				"INSERT INTO `{$table}` (bucket_hash, generation, key_hash, cache_key, cache_value, value_size, flags, expires_at, created_at, updated_at)
-				VALUES (UNHEX(%s), %d, UNHEX(%s), %s, %s, %d, 0, %d, %d, %d)
+				"INSERT INTO `{$table}` (bucket_hash, key_hash, cache_key, cache_value, value_size, flags, expires_at, created_at, updated_at)
+				VALUES (UNHEX(%s), UNHEX(%s), %s, %s, %d, 0, %d, %d, %d)
 				ON DUPLICATE KEY UPDATE cache_key = VALUES(cache_key), cache_value = VALUES(cache_value), value_size = VALUES(value_size), flags = VALUES(flags), expires_at = VALUES(expires_at), updated_at = VALUES(updated_at)",
-				$bucket['bucket_hash'],
-				$bucket['generation'],
+				$identity['bucket_hash'],
 				md5( $cache_key ),
 				$cache_key,
 				$serialized_value,
@@ -153,14 +167,11 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 
 		$this->assertSame( 'database', $cache->backend );
 		$this->assertTrue( $cache->database_schema_checked );
-		$this->assertSame( $wpdb->base_prefix . 'focus_cache_buckets', $cache->database_buckets_table );
 		$this->assertSame( $wpdb->base_prefix . 'focus_cache_items', $cache->database_items_table );
-		$this->assertSame( $wpdb->base_prefix . 'focus_cache_meta', $cache->database_meta_table );
 
-		$this->assertNotEmpty( $wpdb->get_results( "DESCRIBE `{$cache->database_buckets_table}`" ) );
 		$this->assertNotEmpty( $wpdb->get_results( "DESCRIBE `{$cache->database_items_table}`" ) );
-		$this->assertNotEmpty( $wpdb->get_results( "DESCRIBE `{$cache->database_meta_table}`" ) );
-		$this->assertSame( (string) WP_FOCUS_DATABASE_SCHEMA_VERSION, (string) $wpdb->get_var( "SELECT meta_value FROM `{$cache->database_meta_table}` WHERE meta_key = 'schema_version' LIMIT 1" ) );
+		$this->assertNull( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $cache->database_buckets_table ) ) );
+		$this->assertNull( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $cache->database_meta_table ) ) );
 	}
 
 	public function test_database_backend_get_set_false_value_delete_and_expiration() {
@@ -171,33 +182,37 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 		$found = null;
 
 		$this->assertTrue( $cache->set( 'false_key', false, $group ) );
-			$this->assertFalse( $cache->get( 'false_key', $group, false, $found ) );
-			$this->assertTrue( $found );
+		$this->assertFalse( $cache->get( 'false_key', $group, false, $found ) );
+		$this->assertTrue( $found );
 
-			$this->assertTrue( $cache->delete( 'false_key', $group ) );
-			$this->assertFalse( $cache->get( 'false_key', $group, false, $found ) );
-			$this->assertFalse( $found );
+		$this->assertTrue( $cache->delete( 'false_key', $group ) );
+		$this->assertFalse( $cache->get( 'false_key', $group, false, $found ) );
+		$this->assertFalse( $found );
 
-			$this->assertTrue( $cache->set( 'scalar_key', 'scalar_value', $group ) );
-			$cache->flush_runtime();
-			$query_count = $wpdb->num_queries;
-			$this->assertSame( 'scalar_value', $cache->get( 'scalar_key', $group, false, $found ) );
-			$this->assertTrue( $found );
-			$this->assertSame( 1, $wpdb->num_queries - $query_count );
+		$query_count = $wpdb->num_queries;
+		$this->assertTrue( $cache->set( 'scalar_key', 'scalar_value', $group ) );
+		$this->assertSame( 1, $wpdb->num_queries - $query_count );
+		$cache->flush_runtime();
+		$query_count = $wpdb->num_queries;
+		$this->assertSame( 'scalar_value', $cache->get( 'scalar_key', $group, false, $found ) );
+		$this->assertTrue( $found );
+		$this->assertSame( 1, $wpdb->num_queries - $query_count );
 
-			$query_count = $wpdb->num_queries;
-			$this->assertSame( 'scalar_value', $cache->get( 'scalar_key', $group, false, $found ) );
-			$this->assertTrue( $found );
-			$this->assertSame( 0, $wpdb->num_queries - $query_count );
+		$query_count = $wpdb->num_queries;
+		$this->assertSame( 'scalar_value', $cache->get( 'scalar_key', $group, false, $found ) );
+		$this->assertTrue( $found );
+		$this->assertSame( 0, $wpdb->num_queries - $query_count );
 
-			$this->assertTrue( $cache->set( 'short_key', 'short_value', $group, 1 ) );
-			sleep( 2 );
+		$this->assertTrue( $cache->set( 'short_key', 'short_value', $group, 1 ) );
+		sleep( 2 );
 
 		$this->assertFalse( $cache->get( 'short_key', $group, false, $found ) );
 		$this->assertFalse( $found );
 	}
 
 	public function test_database_backend_get_multiple_hydrates_runtime_cache() {
+		global $wpdb;
+
 		$cache = $this->init_database_cache();
 		$group = 'database_get_multiple';
 
@@ -205,7 +220,9 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 		$cache->set( 'key_2', 'value_2', $group );
 		$cache->flush_runtime();
 
+		$query_count = $wpdb->num_queries;
 		$results = $cache->get_multiple( array( 'key_1', 'key_2', 'missing' ), $group );
+		$this->assertSame( 1, $wpdb->num_queries - $query_count );
 
 		$this->assertSame( 'value_1', $results['key_1'] );
 		$this->assertSame( 'value_2', $results['key_2'] );
@@ -233,9 +250,12 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 	}
 
 	public function test_database_backend_batch_writes_and_deletes_use_database_storage() {
+		global $wpdb;
+
 		$cache = $this->init_database_cache();
 		$group = 'database_batch';
 
+		$query_count = $wpdb->num_queries;
 		$this->assertSame(
 			array(
 				'one' => true,
@@ -249,9 +269,11 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 				$group
 			)
 		);
+		$this->assertSame( 1, $wpdb->num_queries - $query_count );
 
 		$cache->flush_runtime();
 
+		$query_count = $wpdb->num_queries;
 		$this->assertSame(
 			array(
 				'one' => false,
@@ -265,7 +287,9 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 				$group
 			)
 		);
+		$this->assertSame( 2, $wpdb->num_queries - $query_count );
 
+		$query_count = $wpdb->num_queries;
 		$this->assertSame(
 			array(
 				'one' => true,
@@ -274,52 +298,42 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 			),
 			$cache->delete_multiple( array( 'one', 'two', 'missing' ), $group )
 		);
+		$this->assertSame( 2, $wpdb->num_queries - $query_count );
 		$this->assertSame( 'value_3', $cache->get( 'three', $group ) );
 	}
 
-	public function test_database_backend_flush_group_bumps_generation() {
+	public function test_database_backend_flush_group_deletes_group_rows() {
 		$cache = $this->init_database_cache();
 		$group = 'database_flush_group';
 		$kept_group = 'database_flush_group_kept';
 
-		$bucket_method = new ReflectionMethod( $cache, 'get_database_bucket' );
-		$bucket_method->setAccessible( true );
-
 		$cache->set( 'flush_key', 'flush_value', $group );
 		$cache->set( 'kept_key', 'kept_value', $kept_group );
-
-		$before = $bucket_method->invoke( $cache, $group, false );
 
 		$this->assertTrue( $cache->flush_group( $group ) );
 		$this->assertFalse( $cache->get( 'flush_key', $group ) );
 		$this->assertSame( 'kept_value', $cache->get( 'kept_key', $kept_group ) );
-
-		$after = $bucket_method->invoke( $cache, $group, false );
-
-		$this->assertIsArray( $before );
-		$this->assertIsArray( $after );
-		$this->assertGreaterThan( $before['generation'], $after['generation'] );
 	}
 
-	public function test_database_backend_gc_removes_expired_and_stale_generation_rows() {
+	public function test_database_backend_gc_removes_expired_rows() {
 		global $wpdb;
 
 		$cache = $this->init_database_cache();
 		$group = 'database_gc';
 
 		$cache->set( 'expired_key', 'expired_value', $group, 1 );
-		$cache->set( 'stale_key', 'stale_value', $group );
+		$cache->set( 'kept_key', 'kept_value', $group );
 		sleep( 2 );
-		$cache->flush_group( $group );
 
 		$deleted = $cache->run_database_gc( 100 );
 		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$cache->database_items_table}`" );
 
-		$this->assertGreaterThanOrEqual( 2, $deleted );
-		$this->assertSame( 0, $count );
+		$this->assertGreaterThanOrEqual( 1, $deleted );
+		$this->assertSame( 1, $count );
+		$this->assertSame( 'kept_value', $cache->get( 'kept_key', $group ) );
 	}
 
-	public function test_database_backend_guards_unavailable_database_and_missing_tables() {
+	public function test_database_backend_guards_unavailable_database() {
 		global $wpdb;
 
 		$cache = $this->init_database_cache();
@@ -336,43 +350,31 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 			$wpdb = $original_wpdb; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 		}
 
-		$tables_exist = $this->get_protected_method( $cache, 'database_tables_exist' );
-
-		$cache->database_buckets_table = '';
-		$this->assertFalse( $tables_exist->invoke( $cache ) );
-
-		$suppress_errors = $wpdb->suppress_errors( true );
-		try {
-			$cache->database_buckets_table = $wpdb->base_prefix . 'focus_cache_missing_buckets';
-			$cache->database_items_table = $wpdb->base_prefix . 'focus_cache_missing_items';
-			$cache->database_meta_table = $wpdb->base_prefix . 'focus_cache_missing_meta';
-
-			$this->assertFalse( $tables_exist->invoke( $cache ) );
-		} finally {
-			$wpdb->suppress_errors( $suppress_errors );
-			$cache->configure_backend( 'database' );
-		}
+		$cache->database_available = false;
+		$this->assertFalse( $this->get_protected_method( $cache, 'flush_database' )->invoke( $cache ) );
+		$this->assertTrue( $this->get_protected_method( $cache, 'flush_database_group' )->invoke( $cache, 'database_unavailable' ) );
+		$this->assertFalse( $this->get_protected_method( $cache, 'save_to_database' )->invoke( $cache, 'key', 'value', 'database_unavailable', 300 ) );
+		$this->assertFalse( $this->get_protected_method( $cache, 'delete_from_database' )->invoke( $cache, 'key', 'database_unavailable' ) );
+		$cache->database_available = true;
 	}
 
-	public function test_database_backend_schema_and_storage_defensive_branches() {
+	public function test_database_backend_storage_defensive_branches() {
 		global $wpdb;
 
 		$cache = $this->init_database_cache();
 
-		$schema_current = $this->get_protected_method( $cache, 'database_schema_current' );
-		$tables_exist = $this->get_protected_method( $cache, 'database_tables_exist' );
 		$get_expiration = $this->get_protected_method( $cache, 'get_expiration' );
 		$load_from_database = $this->get_protected_method( $cache, 'load_from_database' );
+		$load_multiple_from_database = $this->get_protected_method( $cache, 'load_multiple_from_database' );
+		$save_to_database = $this->get_protected_method( $cache, 'save_to_database' );
+		$delete_from_database = $this->get_protected_method( $cache, 'delete_from_database' );
 
 		$this->assertTrue( $cache->set( 'memory_key', 'memory_value', 'database_no_wpdb' ) );
-		$this->assertTrue( $schema_current->invoke( $cache ) );
-		$this->assertTrue( $tables_exist->invoke( $cache ) );
 
 		$original_wpdb = $wpdb;
 		try {
 			$wpdb = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 
-			$this->assertFalse( $schema_current->invoke( $cache ) );
 			$this->assertSame( 0, $get_expiration->invoke( $cache, 'missing', 'database_no_wpdb' ) );
 			$found = null;
 			$this->assertSame( 'memory_value', $cache->get( 'memory_key', 'database_no_wpdb', false, $found ) );
@@ -381,6 +383,9 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 			$found = true;
 			$this->assertFalse( $load_from_database->invokeArgs( $cache, array( 'missing', 'database_no_wpdb', &$found ) ) );
 			$this->assertFalse( $found );
+			$this->assertSame( array(), $load_multiple_from_database->invoke( $cache, array( 'missing' => 'missing' ), 'database_no_wpdb' ) );
+			$this->assertFalse( $save_to_database->invoke( $cache, 'key', 'value', 'database_no_wpdb', 300 ) );
+			$this->assertFalse( $delete_from_database->invoke( $cache, 'key', 'database_no_wpdb' ) );
 		} finally {
 			$wpdb = $original_wpdb; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 		}
@@ -407,11 +412,103 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 		$this->assertFalse( $found );
 	}
 
-	public function test_database_backend_missing_rows_and_buckets_are_safe_noops() {
+	public function test_database_backend_batch_operations_handle_invalid_local_and_oversized_values() {
+		$cache = $this->init_database_cache();
+		$group = 'database_batch_defensive';
+
+		$this->assertTrue( $cache->set( 'memory', 'value', $group ) );
+		$cache->database_max_value_size = 5;
+
+		$this->setExpectedIncorrectUsage( 'WP_Object_Cache::add_multiple' );
+		$this->assertSame(
+			array(
+				'' => false,
+				'memory' => false,
+				'large' => false,
+			),
+			$cache->add_multiple(
+				array(
+					'' => 'invalid',
+					'memory' => 'new_value',
+					'large' => str_repeat( 'x', 50 ),
+				),
+				$group
+			)
+		);
+		$this->assertArrayNotHasKey( $cache->key( 'large', $group ), $cache->cache[ $group ] ?? array() );
+
+		$this->setExpectedIncorrectUsage( 'WP_Object_Cache::set_multiple' );
+		$this->assertSame(
+			array(
+				'' => false,
+				'large' => false,
+			),
+			$cache->set_multiple(
+				array(
+					'' => 'invalid',
+					'large' => str_repeat( 'x', 50 ),
+				),
+				$group
+			)
+		);
+		$this->assertArrayNotHasKey( $cache->key( 'large', $group ), $cache->cache[ $group ] ?? array() );
+
+		$this->setExpectedIncorrectUsage( 'WP_Object_Cache::delete_multiple' );
+		$this->assertSame( array( '' => false ), $cache->delete_multiple( array( '' ), $group ) );
+
+		$cache->database_max_value_size = WP_FOCUS_DATABASE_MAX_VALUE_SIZE;
+		$cache->add_non_persistent_groups( array( 'database_batch_local' ) );
+		$this->assertTrue( $cache->set( 'runtime', 'value', 'database_batch_local' ) );
+		$this->setExpectedIncorrectUsage( 'WP_Object_Cache::delete_multiple' );
+		$this->assertSame(
+			array(
+				'' => false,
+				'runtime' => true,
+			),
+			$cache->delete_multiple( array( '', 'runtime' ), 'database_batch_local' )
+		);
+	}
+
+	public function test_database_backend_batch_storage_defensive_branches() {
+		global $wpdb;
+
+		$cache = $this->init_database_cache();
+		$save_multiple = $this->get_protected_method( $cache, 'save_multiple_to_database' );
+		$delete_multiple = $this->get_protected_method( $cache, 'delete_multiple_from_database' );
+
+		$this->assertSame( array(), $save_multiple->invoke( $cache, array(), 'database_batch_defensive', 300 ) );
+		$this->assertSame( array(), $delete_multiple->invoke( $cache, array(), 'database_batch_defensive' ) );
+		$this->assertSame( array( 'missing' => false ), $delete_multiple->invoke( $cache, array( 'missing' => 'missing' ), 'database_batch_defensive' ) );
+
+		$original_wpdb = $wpdb;
+		try {
+			$wpdb = new Tests_Focus_Database_Non_Array_Results_Wpdb_Double(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+			$this->assertSame( array( 'missing' => false ), $delete_multiple->invoke( $cache, array( 'missing' => 'missing' ), 'database_batch_defensive' ) );
+
+			$wpdb = new Tests_Focus_Database_Query_Failure_Wpdb_Double(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+			$this->assertSame(
+				array( 'key' => false ),
+				$save_multiple->invoke(
+					$cache,
+					array(
+						'key' => array(
+							'cache_key' => 'key',
+							'value' => 'value',
+						),
+					),
+					'database_batch_defensive',
+					300
+				)
+			);
+			$this->assertSame( array( 'missing' => false ), $delete_multiple->invoke( $cache, array( 'missing' => 'missing' ), 'database_batch_defensive' ) );
+		} finally {
+			$wpdb = $original_wpdb; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+		}
+	}
+
+	public function test_database_backend_missing_rows_are_safe_noops() {
 		$cache = $this->init_database_cache();
 		$group = 'database_missing_rows';
-
-		$this->get_database_bucket( $cache, $group, true );
 
 		$this->assertSame( 0, $this->get_protected_method( $cache, 'get_expiration' )->invoke( $cache, 'missing', $group ) );
 		$this->assertSame( array(), $this->get_protected_method( $cache, 'load_multiple_from_database' )->invoke( $cache, array(), $group ) );
@@ -424,12 +521,12 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 
 		$cache = $this->init_database_cache();
 		$group = 'database_non_array_results';
-		$this->get_database_bucket( $cache, $group, true );
 
 		$load_multiple = $this->get_protected_method( $cache, 'load_multiple_from_database' );
 		$chunk_method = $this->get_protected_method( $cache, 'load_prefetch_request_chunk_from_database' );
-		$bucket = $this->get_database_bucket( $cache, $group, false );
-		$this->assertIsArray( $bucket );
+		$bucket = $this->get_database_bucket_identity( $cache, $group );
+		$cache_key = $cache->key( 'missing', $group );
+		$key_hash = md5( $cache_key );
 
 		$original_wpdb = $wpdb;
 		try {
@@ -439,10 +536,11 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 			$chunk_method->invoke(
 				$cache,
 				array(
-					$bucket['bucket_hash'] . ':' . $bucket['generation'] . ':' . md5( 'missing' ) => array(
+					$bucket['bucket_hash'] . ':' . $key_hash => array(
 						'group' => $group,
-						'cache_key' => 'missing',
-						'key_hash' => md5( 'missing' ),
+						'raw_key' => 'missing',
+						'cache_key' => $cache_key,
+						'key_hash' => $key_hash,
 						'bucket' => $bucket,
 					),
 				)
@@ -457,12 +555,12 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 
 		$cache = $this->init_database_cache();
 		$group = 'database_mismatched_results';
-		$this->get_database_bucket( $cache, $group, true );
 
 		$load_multiple = $this->get_protected_method( $cache, 'load_multiple_from_database' );
 		$chunk_method = $this->get_protected_method( $cache, 'load_prefetch_request_chunk_from_database' );
-		$bucket = $this->get_database_bucket( $cache, $group, false );
-		$this->assertIsArray( $bucket );
+		$bucket = $this->get_database_bucket_identity( $cache, $group );
+		$cache_key = $cache->key( 'missing', $group );
+		$key_hash = md5( $cache_key );
 
 		$original_wpdb = $wpdb;
 		try {
@@ -472,10 +570,11 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 			$chunk_method->invoke(
 				$cache,
 				array(
-					$bucket['bucket_hash'] . ':' . $bucket['generation'] . ':' . md5( 'missing' ) => array(
+					$bucket['bucket_hash'] . ':' . $key_hash => array(
 						'group' => $group,
-						'cache_key' => 'missing',
-						'key_hash' => md5( 'missing' ),
+						'raw_key' => 'missing',
+						'cache_key' => $cache_key,
+						'key_hash' => $key_hash,
 						'bucket' => $bucket,
 					),
 				)
@@ -524,33 +623,16 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 		$this->assertSame( 0, $count );
 	}
 
-	public function test_database_backend_alias_and_base_fallback_methods() {
+	public function test_database_backend_base_fallback_methods() {
 		$cache = new FOCUS_File_Object_Cache();
 
 		$cache->configure_backend( 'db' );
 
-		$this->assertSame( 'database', $cache->requested_backend );
+		$this->assertSame( 'file', $cache->requested_backend );
 		$this->assertSame( 'file', $cache->backend );
 		$this->assertFalse( $cache->is_database_backend() );
 		$this->assertFalse( $cache->install_database_tables() );
 		$this->assertSame( 0, $cache->run_database_gc( 100 ) );
-	}
-
-	public function test_database_backend_opportunistic_gc_can_run_deterministically() {
-		global $wpdb;
-
-		$cache = $this->init_database_cache();
-		$group = 'database_opportunistic_gc';
-		$gc_method = $this->get_protected_method( $cache, 'maybe_run_database_gc' );
-
-		$cache->set( 'expired_key', 'expired_value', $group, 1 );
-		sleep( 2 );
-
-		$cache->database_gc_probability = 1;
-		$gc_method->invoke( $cache );
-
-		$count = (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$cache->database_items_table}`" );
-		$this->assertSame( 0, $count );
 	}
 
 	public function test_database_backend_prefetch_hydrates_multiple_groups() {
@@ -664,17 +746,18 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 
 		$suppress_errors = $wpdb->suppress_errors( true );
 		try {
-			$bucket = $this->get_database_bucket( $cache, $group, false );
-			$this->assertIsArray( $bucket );
+			$bucket = $this->get_database_bucket_identity( $cache, $group );
+			$missing_cache_key = $cache->key( 'missing', $group );
+			$missing_key_hash = md5( $missing_cache_key );
 
 			$cache->database_items_table = $wpdb->base_prefix . 'focus_cache_missing_items';
 			$chunk_method->invoke(
 				$cache,
 				array(
-					$bucket['bucket_hash'] . ':' . $bucket['generation'] . ':' . md5( 'missing' ) => array(
+					$bucket['bucket_hash'] . ':' . $missing_key_hash => array(
 						'group' => $group,
-						'cache_key' => 'missing',
-						'key_hash' => md5( 'missing' ),
+						'cache_key' => $missing_cache_key,
+						'key_hash' => $missing_key_hash,
 						'bucket' => $bucket,
 					),
 				)

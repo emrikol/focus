@@ -5,6 +5,7 @@ REMOTE="${FOCUS_DEPLOY_REMOTE:-emrikol@decarbonated.org}"
 SITE_PATH="${FOCUS_DEPLOY_SITE_PATH:-/home/emrikol/yulelikelinton.com}"
 BACKUP_ROOT="${FOCUS_DEPLOY_BACKUP_ROOT:-/home/emrikol/yulelikelinton.com-backups}"
 BACKEND="${FOCUS_DEPLOY_BACKEND:-database}"
+PREFETCH="${FOCUS_DEPLOY_PREFETCH:-true}"
 IDENTITY_FILE="${FOCUS_DEPLOY_IDENTITY:-${HOME}/.ssh/id_ed25519}"
 REQUIRED_BRANCH="${FOCUS_DEPLOY_BRANCH:-2.0.0}"
 RUN_CHECKS="${FOCUS_DEPLOY_RUN_CHECKS:-1}"
@@ -71,12 +72,13 @@ rsync -az --delete --delete-excluded \
 
 ssh "${SSH_OPTS[@]}" -n "${REMOTE}" "cp '${PLUGIN_PATH}/includes/object-cache.php' '${CONTENT_PATH}/object-cache.php'"
 
-ssh "${SSH_OPTS[@]}" "${REMOTE}" "WP_CONFIG='${WP_CONFIG}' FOCUS_BACKEND='${BACKEND}' php" <<'PHP'
+ssh "${SSH_OPTS[@]}" "${REMOTE}" "WP_CONFIG='${WP_CONFIG}' FOCUS_BACKEND='${BACKEND}' FOCUS_PREFETCH='${PREFETCH}' php" <<'PHP'
 <?php
 declare(strict_types=1);
 
-$path    = getenv( 'WP_CONFIG' );
-$backend = getenv( 'FOCUS_BACKEND' ) ?: 'database';
+$path     = getenv( 'WP_CONFIG' );
+$backend  = getenv( 'FOCUS_BACKEND' ) ?: 'database';
+$prefetch = getenv( 'FOCUS_PREFETCH' ) ?: 'true';
 
 if ( false === $path || '' === $path || ! is_file( $path ) || ! is_readable( $path ) || ! is_writable( $path ) ) {
 	fwrite( STDERR, "wp-config.php is not readable and writable.\n" );
@@ -89,23 +91,37 @@ if ( false === $contents ) {
 	exit( 1 );
 }
 
-$backend = preg_replace( '/[^a-z0-9_-]/i', '', $backend ) ?: 'database';
-$block   = "if ( ! defined( 'WP_FOCUS_BACKEND' ) ) {\n\tdefine( 'WP_FOCUS_BACKEND', '" . addslashes( $backend ) . "' );\n}\n";
+function focus_upsert_wp_config_define( string $contents, string $constant, string $block ): string {
+	$quoted        = preg_quote( $constant, '/' );
+	$guard_pattern = "/if\s*\(\s*!\s*defined\s*\(\s*['\"]{$quoted}['\"]\s*\)\s*\)\s*\{\s*define\s*\(\s*['\"]{$quoted}['\"]\s*,\s*.+?\)\s*;\s*\}\s*/s";
+	$define_pattern = "/define\s*\(\s*['\"]{$quoted}['\"]\s*,\s*.+?\)\s*;\s*/s";
 
-$guard_pattern  = "/if\s*\(\s*!\s*defined\s*\(\s*['\"]WP_FOCUS_BACKEND['\"]\s*\)\s*\)\s*\{\s*define\s*\(\s*['\"]WP_FOCUS_BACKEND['\"]\s*,\s*['\"][^'\"]*['\"]\s*\)\s*;\s*\}\s*/s";
-$define_pattern = "/define\s*\(\s*['\"]WP_FOCUS_BACKEND['\"]\s*,\s*['\"][^'\"]*['\"]\s*\)\s*;\s*/";
+	if ( preg_match( $guard_pattern, $contents ) ) {
+		return preg_replace( $guard_pattern, $block, $contents, 1 );
+	}
 
-if ( preg_match( $guard_pattern, $contents ) ) {
-	$contents = preg_replace( $guard_pattern, $block, $contents, 1 );
-} elseif ( preg_match( $define_pattern, $contents ) ) {
-	$contents = preg_replace( $define_pattern, $block, $contents, 1 );
-} elseif ( false !== strpos( $contents, "/* That's all, stop editing!" ) ) {
-	$contents = str_replace( "/* That's all, stop editing!", $block . "\n/* That's all, stop editing!", $contents );
-} elseif ( false !== strpos( $contents, "require_once ABSPATH . 'wp-settings.php';" ) ) {
-	$contents = str_replace( "require_once ABSPATH . 'wp-settings.php';", $block . "\nrequire_once ABSPATH . 'wp-settings.php';", $contents );
-} else {
-	$contents .= "\n" . $block;
+	if ( preg_match( $define_pattern, $contents ) ) {
+		return preg_replace( $define_pattern, $block, $contents, 1 );
+	}
+
+	if ( false !== strpos( $contents, "/* That's all, stop editing!" ) ) {
+		return str_replace( "/* That's all, stop editing!", $block . "\n/* That's all, stop editing!", $contents );
+	}
+
+	if ( false !== strpos( $contents, "require_once ABSPATH . 'wp-settings.php';" ) ) {
+		return str_replace( "require_once ABSPATH . 'wp-settings.php';", $block . "\nrequire_once ABSPATH . 'wp-settings.php';", $contents );
+	}
+
+	return $contents . "\n" . $block;
 }
+
+$backend          = preg_replace( '/[^a-z0-9_-]/i', '', $backend ) ?: 'database';
+$prefetch_enabled = in_array( strtolower( (string) $prefetch ), array( '1', 'true', 'yes', 'on' ), true ) ? 'true' : 'false';
+$backend_block    = "if ( ! defined( 'WP_FOCUS_BACKEND' ) ) {\n\tdefine( 'WP_FOCUS_BACKEND', '" . addslashes( $backend ) . "' );\n}\n";
+$prefetch_block   = "if ( ! defined( 'WP_FOCUS_CACHE_PREFETCH' ) ) {\n\tdefine( 'WP_FOCUS_CACHE_PREFETCH', {$prefetch_enabled} );\n}\n";
+
+$contents = focus_upsert_wp_config_define( $contents, 'WP_FOCUS_BACKEND', $backend_block );
+$contents = focus_upsert_wp_config_define( $contents, 'WP_FOCUS_CACHE_PREFETCH', $prefetch_block );
 
 if ( false === file_put_contents( $path, $contents ) ) {
 	fwrite( STDERR, "Unable to write wp-config.php.\n" );
