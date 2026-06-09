@@ -7,13 +7,12 @@
 
 	<!-- What to scan -->
 	<file>./includes/</file>
-	<file>./*.php</file>
+	<file>./focus.php</file>
 
 	<!-- Ignoring Files and Folders:
 		https://github.com/squizlabs/PHP_CodeSniffer/wiki/Advanced-Usage#ignoring-files-and-folders -->
 	<exclude-pattern>/tests/</exclude-pattern>
 	<exclude-pattern>/vendor/</exclude-pattern>
-	<exclude-pattern>/phpcs/</exclude-pattern>
 	<exclude-pattern>/\.phpunit.cache/</exclude-pattern>
 	<exclude-pattern>/\$WP_TESTS_DIR/</exclude-pattern>
 
@@ -52,6 +51,9 @@
 			<property name="prefixes" type="array">
 				<element value="focus"/>
 				<element value="FOCUS"/>
+				<element value="wp_cache"/>
+				<element value="WP_Object_Cache"/>
+				<element value="WP_FOCUS"/>
 			</property>
 		</properties>
 	</rule>
@@ -84,13 +86,47 @@
 		<exclude name="Universal.Files.SeparateFunctionsFromOO.Mixed" />
 	</rule>
 
-	<!-- Custom Sniffs -->
-	<rule ref="./phpcs/VIPServices/ruleset.xml"/>
-	<rule ref="VIPServices.Functions.TypeDeclaration">
-		<properties>
-			<property name="custom_classes" type="array">
-				<element value="Example_Custom_Class"/>
-			</property>
-		</properties>
+	<!-- The object-cache drop-in must be self-contained, including concrete backend classes. -->
+	<rule ref="Generic.Files.OneObjectStructurePerFile.MultipleFound">
+		<exclude-pattern>includes/object-cache.php</exclude-pattern>
 	</rule>
+
+	<!-- Coverage annotations intentionally sit adjacent to the guarded lines they exclude. -->
+	<rule ref="Emrikol.Comments.InlineCommentPeriod">
+		<exclude-pattern>includes/admin-page.php</exclude-pattern>
+		<exclude-pattern>includes/class-focus-cache.php</exclude-pattern>
+		<exclude-pattern>includes/object-cache.php</exclude-pattern>
+	</rule>
+
+	<!-- Custom Sniffs — emrikol/phpcs -->
+	<rule ref="Emrikol"/>
+
+	<!-- Namespace exclusions — files that legitimately live in the global namespace -->
+	<rule ref="Emrikol.Namespaces.Namespace.MissingNamespace">
+		<exclude-pattern>focus.php</exclude-pattern>
+		<exclude-pattern>includes/class-focus-cache.php</exclude-pattern>
+		<exclude-pattern>includes/object-cache.php</exclude-pattern>
+		<exclude-pattern>includes/admin-page.php</exclude-pattern>
+	</rule>
+
+	<!-- Cache data is genuinely mixed — suppress in object-cache.php -->
+	<rule ref="Emrikol.PHP.DiscouragedMixedType">
+		<exclude-pattern>includes/object-cache.php</exclude-pattern>
+	</rule>
+
+	<!-- WordPress object-cache drop-ins must match core's untyped public API. -->
+	<rule ref="Emrikol.PHP.StrictTypes">
+		<exclude-pattern>includes/object-cache.php</exclude-pattern>
+	</rule>
+	<rule ref="Emrikol.Functions.TypeHinting">
+		<exclude-pattern>includes/object-cache.php</exclude-pattern>
+	</rule>
+	<rule ref="Emrikol.Functions.TypeDeclaration">
+		<exclude-pattern>includes/object-cache.php</exclude-pattern>
+	</rule>
+
+	<!-- WordPress presets -->
+	<rule ref="./vendor/emrikol/phpcs/presets/wordpress-classes.xml"/>
+	<rule ref="./vendor/emrikol/phpcs/presets/wordpress-global-classes.xml"/>
+	<rule ref="./vendor/emrikol/phpcs/presets/php-global-classes.xml"/>
 </ruleset>

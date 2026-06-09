@@ -9,6 +9,34 @@ declare(strict_types=1);
  * @group cache
  * @group focus
  */
+class Tests_Focus_Expired_Mutation_Cache extends WP_Object_Cache {
+	public bool $deleted_expired_key = false;
+
+	public function get( $key, $group = 'default', $force = false, &$found = null, $stat = true ) {
+		$found = true;
+		return 10;
+	}
+
+	protected function get_expiration( int|string $key, string $group ): int {
+		return -1;
+	}
+
+	public function delete( $key, $group = 'default', $deprecated = false ) {
+		$this->deleted_expired_key = true;
+		return true;
+	}
+}
+
+class Tests_Focus_False_Prefetch_Key_Cache extends WP_Object_Cache {
+	public function is_prefetch_enabled(): bool {
+		return true;
+	}
+
+	public function get_prefetch_key(): string|false {
+		return false;
+	}
+}
+
 class Tests_Focus_Cache extends WP_UnitTestCase {
 	
 	private $cache;
@@ -50,9 +78,9 @@ class Tests_Focus_Cache extends WP_UnitTestCase {
 		
 		$cache_class = get_class($wp_object_cache);
 		
-		// Debug: Check what cache class we're actually using
-		if ($cache_class !== 'WP_Object_Cache') {
-			error_log("WARNING: Expected FOCUS cache but got: " . $cache_class);
+		// Debug: Check what cache class we're actually using.
+		if ( ! is_a( $cache_class, 'WP_Object_Cache', true ) ) {
+			error_log( 'WARNING: Expected FOCUS cache but got: ' . $cache_class ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
 		}
 		
 		$cache = new $cache_class();
@@ -845,6 +873,113 @@ class Tests_Focus_Cache extends WP_UnitTestCase {
 		$this->assertFalse(wp_cache_supports('unknown_feature'));
 		$this->assertFalse(wp_cache_supports('redis_specific'));
 		$this->assertFalse(wp_cache_supports(''));
+
+		$this->assertTrue(function_exists('wp_cache_reset'));
+		$this->assertTrue(function_exists('wp_cache_get_salted'));
+		$this->assertTrue(function_exists('wp_cache_set_salted'));
+		$this->assertTrue(function_exists('wp_cache_get_multiple_salted'));
+		$this->assertTrue(function_exists('wp_cache_set_multiple_salted'));
+		$this->assertTrue(method_exists($this->cache, 'reset'));
+	}
+
+	/**
+	 * Test single salted cache helpers match WordPress core behavior.
+	 */
+	public function test_salted_cache_helpers() {
+		global $wp_object_cache;
+
+		$previous_cache   = $wp_object_cache;
+		$wp_object_cache = $this->cache;
+
+		try {
+			$group       = 'test_salted_helpers';
+			$cache_key   = 'salted_key';
+			$salt        = array('posts-1', 'terms-1');
+			$salt_string = implode(':', $salt);
+			$data        = array(
+				'key1' => 'value1',
+				'key2' => 'value2',
+			);
+
+			$this->assertTrue(wp_cache_set_salted($cache_key, $data, $group, $salt, 600));
+
+			$raw_cache = wp_cache_get($cache_key, $group);
+			$this->assertSame($data, $raw_cache['data'], 'Salted cache should store data in the data envelope key');
+			$this->assertSame($salt_string, $raw_cache['salt'], 'Array salts should be joined with colons');
+
+			$this->assertSame($data, wp_cache_get_salted($cache_key, $group, $salt));
+			$this->assertFalse(wp_cache_get_salted($cache_key, $group, 'stale-salt'), 'Changed salts should make cache stale');
+			$this->assertFalse(wp_cache_get_salted('missing_key', $group, $salt), 'Missing salted values should return false');
+
+			wp_cache_set('malformed_key', array('salt' => $salt_string), $group);
+			$this->assertFalse(wp_cache_get_salted('malformed_key', $group, $salt), 'Malformed salted envelopes should return false');
+		} finally {
+			$wp_object_cache = $previous_cache;
+		}
+	}
+
+	/**
+	 * Test multiple salted cache helpers match WordPress core behavior.
+	 */
+	public function test_multiple_salted_cache_helpers() {
+		global $wp_object_cache;
+
+		$previous_cache   = $wp_object_cache;
+		$wp_object_cache = $this->cache;
+
+		try {
+			$group = 'test_multiple_salted_helpers';
+			$salt  = 'last-changed-1';
+			$data  = array(
+				'salted_key_1' => 'value1',
+				'salted_key_2' => array('value2'),
+			);
+
+			$this->assertSame(
+				array(
+					'salted_key_1' => true,
+					'salted_key_2' => true,
+				),
+				wp_cache_set_multiple_salted($data, $group, $salt, 600)
+			);
+
+			$this->assertSame(
+				array(
+					'salted_key_1' => array(
+						'data' => 'value1',
+						'salt' => $salt,
+					),
+					'salted_key_2' => array(
+						'data' => array('value2'),
+						'salt' => $salt,
+					),
+				),
+				wp_cache_get_multiple(array('salted_key_1', 'salted_key_2'), $group),
+				'Salted multiple sets should store the WordPress core envelope'
+			);
+
+			wp_cache_set(
+				'stale_key',
+				array(
+					'data' => 'old-value',
+					'salt' => 'last-changed-0',
+				),
+				$group
+			);
+
+			$this->assertSame(
+				array(
+					'salted_key_1' => 'value1',
+					'salted_key_2' => array('value2'),
+					'stale_key' => false,
+					'missing_key' => false,
+				),
+				wp_cache_get_multiple_salted(array('salted_key_1', 'salted_key_2', 'stale_key', 'missing_key'), $group, $salt),
+				'Multiple salted gets should return false for stale or missing values'
+			);
+		} finally {
+			$wp_object_cache = $previous_cache;
+		}
 	}
 
 	/**
@@ -1021,6 +1156,64 @@ class Tests_Focus_Cache extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test that add() does not overwrite values persisted by a previous request
+	 */
+	public function test_add_respects_persisted_values() {
+		$group = 'test_add_persisted_exists';
+
+		$this->cache->set('persisted_key', 'original_value', $group);
+
+		$fresh_cache = $this->init_cache();
+		$this->assertFalse($fresh_cache->add('persisted_key', 'new_value', $group), 'add should fail for persisted existing keys');
+		$this->assertSame('original_value', $fresh_cache->get('persisted_key', $group), 'add should not overwrite persisted values');
+	}
+
+	/**
+	 * Test that add_multiple() does not overwrite values persisted by a previous request
+	 */
+	public function test_add_multiple_respects_persisted_values() {
+		$group = 'test_add_multiple_persisted_exists';
+
+		$this->cache->set('existing_key', 'original_value', $group);
+
+		$fresh_cache = $this->init_cache();
+		$results = $fresh_cache->add_multiple(
+			array(
+				'existing_key' => 'new_value',
+				'new_key' => 'new_key_value',
+			),
+			$group
+		);
+
+		$this->assertFalse($results['existing_key'], 'add_multiple should fail for persisted existing keys');
+		$this->assertTrue($results['new_key'], 'add_multiple should still add missing keys');
+		$this->assertSame('original_value', $fresh_cache->get('existing_key', $group), 'add_multiple should not overwrite persisted values');
+		$this->assertSame('new_key_value', $fresh_cache->get('new_key', $group), 'add_multiple should persist new keys');
+	}
+
+	/**
+	 * Test replace(), incr(), decr(), and delete() against persisted values
+	 */
+	public function test_persisted_value_mutations_from_fresh_cache_instance() {
+		$group = 'test_persisted_mutations';
+
+		$this->cache->set('replace_key', 'original_value', $group);
+		$this->cache->set('counter_key', 10, $group);
+		$this->cache->set('delete_key', 'delete_value', $group);
+
+		$fresh_cache = $this->init_cache();
+
+		$this->assertTrue($fresh_cache->replace('replace_key', 'replacement_value', $group), 'replace should find persisted values');
+		$this->assertSame('replacement_value', $fresh_cache->get('replace_key', $group), 'replace should update persisted values');
+
+		$this->assertSame(15, $fresh_cache->incr('counter_key', 5, $group), 'incr should find persisted counters');
+		$this->assertSame(12, $fresh_cache->decr('counter_key', 3, $group), 'decr should find persisted counters');
+
+		$this->assertTrue($fresh_cache->delete('delete_key', $group), 'delete should report success for persisted values');
+		$this->assertFalse($fresh_cache->get('delete_key', $group), 'delete should remove persisted values');
+	}
+
+	/**
 	 * Test that delete_multiple() actually removes files from disk
 	 */
 	public function test_delete_multiple_persistence() {
@@ -1066,303 +1259,943 @@ class Tests_Focus_Cache extends WP_UnitTestCase {
 	}
 
 	/**
-	 * Helper method to enable preload functionality for testing
-	 * Since WP_FOCUS_CACHE_PRELOAD is already defined as false, we need to temporarily override it
+	 * Test backward-compatible magic property accessors.
 	 */
-	private function enable_preload_for_testing() {
-		// Use reflection to temporarily change the constant behavior
-		// We'll modify the cache object's behavior directly for testing
-		if ( ! $this->cache->preload_dir ) {
-			// Initialize preload directory if not set
-			$cache_dir = WP_CONTENT_DIR . '/focus-object-cache';
-			$this->cache->preload_dir = $cache_dir . '/preload/';
-			
-			// Create preload directory
-			if ( ! is_dir( $this->cache->preload_dir ) ) {
-				wp_mkdir_p( $this->cache->preload_dir );
+	public function test_magic_property_accessors() {
+		$this->cache->__set( 'secret', 'unit-test-secret' );
+
+		$this->assertSame( 'unit-test-secret', $this->cache->__get( 'secret' ) );
+		$this->assertTrue( $this->cache->__isset( 'secret' ) );
+
+		$this->cache->__unset( 'secret' );
+
+		$this->assertFalse( $this->cache->__isset( 'secret' ) );
+	}
+
+	/**
+	 * Test stats output and debug line colorization.
+	 */
+	public function test_stats_output_is_rendered_and_limited() {
+		unset( $_GET['debug_queries'] );
+
+		$this->cache->cache_hits = 7;
+		$this->cache->cache_misses = 3;
+		$this->cache->group_ops = array(
+			'stats_group' => array_merge(
+				array(
+					'Get stats_key',
+					'Set stats_key',
+					'Add stats_key',
+					'Delete stats_key',
+					'Hit stats_key',
+					'Miss stats_key',
+				),
+				array_fill( 0, 500, 'Get overflow_key' )
+			),
+		);
+
+		ob_start();
+		$this->cache->stats();
+		$output = ob_get_clean();
+
+		$this->assertStringContainsString( 'Cache Hits:', $output );
+		$this->assertStringContainsString( '7', $output );
+		$this->assertStringContainsString( 'Cache Misses:', $output );
+		$this->assertStringContainsString( '3', $output );
+		$this->assertStringContainsString( 'stats_group commands', $output );
+		$this->assertStringContainsString( 'Too many to show!', $output );
+		$this->assertStringContainsString( '<span style="color:green">Get</span>', $output );
+		$this->assertStringContainsString( '<span style="color:purple">Set</span>', $output );
+		$this->assertStringContainsString( '<span style="color:blue">Add</span>', $output );
+		$this->assertStringContainsString( '<span style="color:red">Delete</span>', $output );
+		$this->assertStringContainsString( '<span style="color:orange">Hit</span>', $output );
+		$this->assertStringContainsString( '<span style="color:brown">Miss</span>', $output );
+
+		$_GET['debug_queries'] = 'true';
+
+		ob_start();
+		$this->cache->stats();
+		$debug_output = ob_get_clean();
+
+		unset( $_GET['debug_queries'] );
+
+		$this->assertStringNotContainsString( 'Too many to show!', $debug_output );
+	}
+
+	/**
+	 * Test cached context helper state.
+	 */
+	public function test_context_detection_helpers_cache_constant_state() {
+		$this->cache->is_wp_cli = null;
+		$this->cache->is_doing_cron = null;
+		$this->cache->is_xmlrpc_request = null;
+
+		$this->assertSame( defined( 'WP_CLI' ) && WP_CLI, $this->cache->is_wp_cli() );
+		$this->assertSame( defined( 'DOING_CRON' ) && DOING_CRON, $this->cache->is_doing_cron() );
+		$this->assertSame( defined( 'XMLRPC_REQUEST' ) && XMLRPC_REQUEST, $this->cache->is_xmlrpc_request() );
+
+		$this->cache->is_wp_cli = true;
+		$this->cache->is_doing_cron = true;
+		$this->cache->is_xmlrpc_request = true;
+
+		$this->assertTrue( $this->cache->is_wp_cli() );
+		$this->assertTrue( $this->cache->is_doing_cron() );
+		$this->assertTrue( $this->cache->is_xmlrpc_request() );
+	}
+
+	/**
+	 * Test reset clears non-global runtime groups and preserves global runtime groups.
+	 */
+	public function test_reset_preserves_global_runtime_groups() {
+		$this->cache->add_global_groups( array( 'global_reset_group' ) );
+		$this->cache->set( 'global_key', 'global_value', 'global_reset_group' );
+		$this->cache->set( 'local_key', 'local_value', 'local_reset_group' );
+
+		$this->setExpectedDeprecated( 'reset' );
+		$this->cache->reset();
+
+		$this->assertArrayHasKey( 'global_reset_group', $this->cache->cache );
+		$this->assertArrayNotHasKey( 'local_reset_group', $this->cache->cache );
+	}
+
+	/**
+	 * Test empty batch operations return empty arrays.
+	 */
+	public function test_empty_batch_operations_return_empty_arrays() {
+		$this->assertSame( array(), $this->cache->add_multiple( array(), 'empty_batch' ) );
+		$this->assertSame( array(), $this->cache->set_multiple( array(), 'empty_batch' ) );
+		$this->assertSame( array(), $this->cache->get_multiple( array(), 'empty_batch' ) );
+		$this->assertSame( array(), $this->cache->delete_multiple( array(), 'empty_batch' ) );
+	}
+
+	/**
+	 * Test invalid keys in batch operations fail per-key without aborting the batch.
+	 */
+	public function test_batch_operations_handle_invalid_keys_per_key() {
+		$group = 'test_invalid_batch_keys';
+
+		$this->setExpectedIncorrectUsage( 'WP_Object_Cache::add_multiple' );
+		$this->setExpectedIncorrectUsage( 'WP_Object_Cache::set_multiple' );
+		$this->setExpectedIncorrectUsage( 'WP_Object_Cache::get_multiple' );
+		$this->setExpectedIncorrectUsage( 'WP_Object_Cache::delete_multiple' );
+
+		$add_results = $this->cache->add_multiple(
+			array(
+				'' => 'empty-key',
+				'valid_add_key' => 'valid-value',
+			),
+			$group
+		);
+
+		$set_results = $this->cache->set_multiple(
+			array(
+				'' => 'empty-key',
+				'valid_set_key' => 'valid-value',
+			),
+			$group
+		);
+
+		$get_results = $this->cache->get_multiple( array( '', 'valid_add_key' ), $group );
+		$delete_results = $this->cache->delete_multiple( array( '', 'valid_add_key' ), $group );
+
+		$this->assertFalse( $add_results[''] );
+		$this->assertTrue( $add_results['valid_add_key'] );
+		$this->assertFalse( $set_results[''] );
+		$this->assertTrue( $set_results['valid_set_key'] );
+		$this->assertFalse( $get_results[''] );
+		$this->assertSame( 'valid-value', $get_results['valid_add_key'] );
+		$this->assertFalse( $delete_results[''] );
+		$this->assertTrue( $delete_results['valid_add_key'] );
+	}
+
+	/**
+	 * Test direct flush_group method delegates to delete_group().
+	 */
+	public function test_direct_flush_group_method() {
+		$group = 'test_direct_flush_group';
+
+		$this->cache->set( 'flush_key', 'flush_value', $group );
+
+		$this->assertSame( 'flush_value', $this->cache->get( 'flush_key', $group ) );
+		$this->assertTrue( $this->cache->flush_group( $group ) );
+		$this->assertFalse( $this->cache->get( 'flush_key', $group ) );
+	}
+
+	/**
+	 * Test WordPress install mode short-circuits persistent cache operations.
+	 */
+	public function test_install_mode_short_circuits_cache_operations() {
+		global $wp_object_cache;
+
+		$previous_cache = $wp_object_cache;
+		$previous_script_name = $_SERVER['SCRIPT_NAME'] ?? null;
+		$wp_object_cache = $this->cache;
+		$_SERVER['SCRIPT_NAME'] = '/wp-admin/install.php';
+
+		try {
+			$found = null;
+
+			$this->assertTrue( wp_cache_add( 'install_add', 'value', 'install_group' ) );
+			$this->assertFalse( wp_cache_decr( 'install_decr', 1, 'install_group' ) );
+			$this->assertTrue( wp_cache_delete( 'install_delete', 'install_group' ) );
+			$this->assertFalse( wp_cache_get( 'install_get', 'install_group', false, $found ) );
+			$this->assertFalse( $found );
+			$this->assertFalse( wp_cache_incr( 'install_incr', 1, 'install_group' ) );
+			$this->assertTrue( wp_cache_replace( 'install_replace', 'value', 'install_group' ) );
+			$this->assertTrue( wp_cache_set( 'install_set', 'value', 'install_group' ) );
+			$this->assertSame( array( 'a' => true ), wp_cache_add_multiple( array( 'a' => 'value' ), 'install_group' ) );
+			$this->assertSame( array( 'a' => true ), wp_cache_set_multiple( array( 'a' => 'value' ), 'install_group' ) );
+			$this->assertSame( array( 'a' => false ), wp_cache_get_multiple( array( 'a' ), 'install_group' ) );
+			$this->assertSame( array( 'a' => true ), wp_cache_delete_multiple( array( 'a' ), 'install_group' ) );
+			$this->assertTrue( wp_cache_flush_group( 'install_group' ) );
+
+			$this->assertTrue( $this->cache->add( 'direct_add', 'value', 'install_group' ) );
+			$this->assertTrue( $this->cache->set( 'direct_set', 'value', 'install_group' ) );
+			$this->assertFalse( $this->cache->get( 'direct_get', 'install_group', false, $found ) );
+			$this->assertFalse( $found );
+		} finally {
+			$wp_object_cache = $previous_cache;
+			if ( null === $previous_script_name ) {
+				unset( $_SERVER['SCRIPT_NAME'] );
+			} else {
+				$_SERVER['SCRIPT_NAME'] = $previous_script_name;
 			}
 		}
-		
-		// Set a property to indicate preload is enabled for this test
-		$this->cache->test_preload_enabled = true;
 	}
 
 	/**
-	 * Helper method to check if preload should be enabled for testing
+	 * Test global wp_cache_* wrappers not exercised by core compatibility tests.
 	 */
-	private function should_test_preload() {
-		return isset( $this->cache->test_preload_enabled ) && $this->cache->test_preload_enabled;
+	public function test_global_cache_wrapper_functions() {
+		global $wp_object_cache;
+
+		$previous_cache = $wp_object_cache;
+		$wp_object_cache = $this->cache;
+
+		try {
+			$this->assertTrue( wp_cache_close() );
+
+			wp_cache_add_global_groups( array( 'wrapper_global_group' ) );
+			$this->assertArrayHasKey( 'wrapper_global_group', $this->cache->global_groups );
+
+			wp_cache_add_non_persistent_groups( array( 'wrapper_non_persistent_group' ) );
+			$this->assertFalse( $this->cache->should_persist( 'wrapper_non_persistent_group' ) );
+
+			$this->cache->set( 'delete_group_key', 'value', 'wrapper_delete_group' );
+			$this->assertTrue( wp_cache_delete_group( 'wrapper_delete_group' ) );
+
+			wp_cache_switch_to_blog( false );
+			$this->assertSame( is_multisite() ? 'Site 1' : 'WP', $this->cache->blog_prefix );
+
+			$this->setExpectedDeprecated( 'wp_cache_reset' );
+			$this->setExpectedDeprecated( 'reset' );
+			wp_cache_reset();
+		} finally {
+			$wp_object_cache = $previous_cache;
+		}
 	}
 
 	/**
-	 * Test cache preload functionality
+	 * Test wp_cache_flush_group() fallback when the backend object has no method.
 	 */
-	public function test_cache_preload_functionality() {
-		// Enable preload for this test
-		$this->enable_preload_for_testing();
+	public function test_flush_group_wrapper_returns_false_without_backend_method() {
+		global $wp_object_cache;
 
-		// Simulate GET request context for preload to work
-		$original_request_method = $_SERVER['REQUEST_METHOD'] ?? null;
-		$original_http_host = $_SERVER['HTTP_HOST'] ?? null;
-		$original_request_uri = $_SERVER['REQUEST_URI'] ?? null;
-		
-		$_SERVER['REQUEST_METHOD'] = 'GET';
-		$_SERVER['HTTP_HOST'] = 'example.com';
-		$_SERVER['REQUEST_URI'] = '/test-page';
+		$previous_cache = $wp_object_cache;
+		$wp_object_cache = new stdClass();
 
-		$group = 'test_preload';
-		$key1 = 'preload_key1';
-		$key2 = 'preload_key2';
-		$value1 = 'preload_value1';
-		$value2 = 'preload_value2';
+		try {
+			$this->assertFalse( wp_cache_flush_group( 'missing_backend_method' ) );
+		} finally {
+			$wp_object_cache = $previous_cache;
+		}
+	}
 
-		// Add some cache data
-		$this->cache->set($key1, $value1, $group);
-		$this->cache->set($key2, $value2, $group);
+	/**
+	 * Test delete_group false paths.
+	 */
+	public function test_delete_group_false_paths() {
+		$this->cache->add_non_persistent_groups( array( 'runtime_only_group' ) );
 
-		// Verify data is in memory cache
-		$this->assertEquals($value1, $this->cache->get($key1, $group));
-		$this->assertEquals($value2, $this->cache->get($key2, $group));
+		$this->assertFalse( $this->cache->delete_group( false ) );
+		$this->assertFalse( $this->cache->delete_group( 'runtime_only_group' ) );
+	}
 
-		// Test preload key generation
-		$preload_key = $this->cache->get_preload_key();
-		$this->assertNotEmpty($preload_key, 'Preload key should be generated');
-		$this->assertTrue(is_string($preload_key), 'Preload key should be a string');
+	/**
+	 * Test invalid direct keys on common cache operations.
+	 */
+	public function test_direct_invalid_keys_fail() {
+		$this->setExpectedIncorrectUsage( 'WP_Object_Cache::add' );
+		$this->setExpectedIncorrectUsage( 'WP_Object_Cache::get' );
+		$this->setExpectedIncorrectUsage( 'WP_Object_Cache::delete' );
+		$this->setExpectedIncorrectUsage( 'WP_Object_Cache::replace' );
+		$this->setExpectedIncorrectUsage( 'WP_Object_Cache::incr' );
+		$this->setExpectedIncorrectUsage( 'WP_Object_Cache::decr' );
 
-		// Test preload save
-		$this->cache->save_preload_cache();
+		$this->assertFalse( $this->cache->add( '', 'value' ) );
+		$this->assertFalse( $this->cache->get( '' ) );
+		$this->assertFalse( $this->cache->delete( '' ) );
+		$this->assertFalse( $this->cache->replace( '', 'value' ) );
+		$this->assertFalse( $this->cache->incr( '' ) );
+		$this->assertFalse( $this->cache->decr( '' ) );
+	}
 
-		// Verify preload file was created
-		$preload_file = $this->cache->preload_dir . $preload_key . '.php';
-		$this->assertTrue(file_exists($preload_file), 'Preload file should be created');
+	/**
+	 * Test suspended cache additions are rejected.
+	 */
+	public function test_suspended_cache_addition_rejects_add() {
+		wp_suspend_cache_addition( true );
 
-		// Verify preload file format
-		$preload_contents = file_get_contents($preload_file);
-		$this->assertStringStartsWith('<?php return; /*', $preload_contents, 'Preload file should have security header');
-		$this->assertStringEndsWith('*/ ?>', $preload_contents, 'Preload file should have security footer');
+		try {
+			$this->assertFalse( $this->cache->add( 'suspended_key', 'value', 'suspended_group' ) );
+		} finally {
+			wp_suspend_cache_addition( false );
+		}
+	}
 
-		// Create a new cache instance to test preload loading
+	/**
+	 * Test numeric mutations handle an expiration race by deleting the key.
+	 */
+	public function test_numeric_mutations_delete_when_expiration_races() {
+		$cache = new Tests_Focus_Expired_Mutation_Cache();
+
+		$this->assertFalse( $cache->incr( 'counter', 1, 'race_group' ) );
+		$this->assertTrue( $cache->deleted_expired_key );
+
+		$cache->deleted_expired_key = false;
+
+		$this->assertFalse( $cache->decr( 'counter', 1, 'race_group' ) );
+		$this->assertTrue( $cache->deleted_expired_key );
+	}
+
+	/**
+	 * Test incr() clamps negative results to zero.
+	 */
+	public function test_incr_clamps_negative_results_to_zero() {
+		$group = 'test_incr_clamp';
+
+		$this->cache->set( 'counter', 1, $group );
+
+		$this->assertSame( 0, $this->cache->incr( 'counter', -5, $group ) );
+	}
+
+	/**
+	 * Test objects loaded from disk are cloned before being returned.
+	 */
+	public function test_object_loaded_from_disk_is_cloned() {
+		$group = 'test_disk_object_clone';
+		$object = (object) array( 'name' => 'stored-object' );
+
+		$this->cache->set( 'object_key', $object, $group );
+
 		$fresh_cache = $this->init_cache();
+		$from_disk = $fresh_cache->get( 'object_key', $group );
+		$normalized_key = $fresh_cache->key( 'object_key', $group );
 
-		// Values should be available in the fresh cache instance due to preload
-		$this->assertEquals($value1, $fresh_cache->get($key1, $group), 'Preloaded data should be available');
-		$this->assertEquals($value2, $fresh_cache->get($key2, $group), 'Preloaded data should be available');
+		$this->assertEquals( $object, $from_disk );
+		$this->assertNotSame( $fresh_cache->cache[ $group ][ $normalized_key ], $from_disk );
+	}
 
-		// Restore original server variables
-		if ($original_request_method !== null) {
-			$_SERVER['REQUEST_METHOD'] = $original_request_method;
-		} else {
-			unset($_SERVER['REQUEST_METHOD']);
-		}
-		if ($original_http_host !== null) {
-			$_SERVER['HTTP_HOST'] = $original_http_host;
-		} else {
-			unset($_SERVER['HTTP_HOST']);
-		}
-		if ($original_request_uri !== null) {
-			$_SERVER['REQUEST_URI'] = $original_request_uri;
-		} else {
-			unset($_SERVER['REQUEST_URI']);
+	/**
+	 * Test corrupted cache file formats are treated as misses and removed.
+	 */
+	public function test_get_handles_corrupted_cache_files() {
+		$group = 'test_corrupted_get';
+		$method = new ReflectionMethod( $this->cache, 'get_focus_file' );
+		$method->setAccessible( true );
+
+		$this->cache->set( 'empty_payload', 'value', $group );
+		$empty_key = $this->cache->key( 'empty_payload', $group );
+		$empty_file = $method->invoke( $this->cache, $empty_key, $group );
+		file_put_contents( $empty_file, $this->cache->cache_serial_header . $this->cache->cache_serial_footer );
+		unset( $this->cache->cache[ $group ][ $empty_key ] );
+
+		$found = null;
+		$this->assertFalse( $this->cache->get( 'empty_payload', $group, false, $found ) );
+		$this->assertFalse( $found );
+		$this->assertFileDoesNotExist( $empty_file );
+
+		$this->cache->set( 'invalid_payload', 'value', $group );
+		$invalid_key = $this->cache->key( 'invalid_payload', $group );
+		$invalid_file = $method->invoke( $this->cache, $invalid_key, $group );
+		file_put_contents( $invalid_file, $this->cache->cache_serial_header . 'not-serialized' . $this->cache->cache_serial_footer );
+		unset( $this->cache->cache[ $group ][ $invalid_key ] );
+
+		$this->assertFalse( $this->cache->get( 'invalid_payload', $group, false, $found ) );
+		$this->assertFalse( $found );
+		$this->assertFileDoesNotExist( $invalid_file );
+	}
+
+	/**
+	 * Test get_multiple handles expired and corrupted files from disk.
+	 */
+	public function test_get_multiple_handles_expired_and_corrupted_disk_values() {
+		$group = 'test_corrupted_get_multiple';
+		$method = new ReflectionMethod( $this->cache, 'get_focus_file' );
+		$method->setAccessible( true );
+
+		$this->cache->set( 'expired_key', 'value', $group, 1 );
+		$expired_key = $this->cache->key( 'expired_key', $group );
+		$expired_file = $method->invoke( $this->cache, $expired_key, $group );
+		touch( $expired_file, time() - 10 );
+
+		$this->cache->set( 'empty_key', 'value', $group );
+		$empty_key = $this->cache->key( 'empty_key', $group );
+		$empty_file = $method->invoke( $this->cache, $empty_key, $group );
+		file_put_contents( $empty_file, $this->cache->cache_serial_header . $this->cache->cache_serial_footer );
+
+		$this->cache->set( 'invalid_key', 'value', $group );
+		$invalid_key = $this->cache->key( 'invalid_key', $group );
+		$invalid_file = $method->invoke( $this->cache, $invalid_key, $group );
+		file_put_contents( $invalid_file, $this->cache->cache_serial_header . 'not-serialized' . $this->cache->cache_serial_footer );
+
+		$fresh_cache = $this->init_cache();
+		$results = $fresh_cache->get_multiple( array( 'expired_key', 'empty_key', 'invalid_key' ), $group, true );
+
+		$this->assertSame(
+			array(
+				'expired_key' => false,
+				'empty_key' => false,
+				'invalid_key' => false,
+			),
+			$results
+		);
+	}
+
+	/**
+	 * Test expiration and file path helper cache branches.
+	 */
+	public function test_expiration_and_file_path_helper_caches() {
+		$group = 'test_helper_caches';
+		$this->cache->set( 'expiration_key', 'value', $group );
+		$normalized_key = $this->cache->key( 'expiration_key', $group );
+
+		$expiration = new ReflectionMethod( $this->cache, 'get_expiration' );
+		$expiration->setAccessible( true );
+
+		$first = $expiration->invoke( $this->cache, $normalized_key, $group );
+		$second = $expiration->invoke( $this->cache, $normalized_key, $group );
+
+		$this->assertSame( $first, $second );
+		$this->assertSame( 0, $expiration->invoke( $this->cache, 'missing_key', $group ) );
+
+		$this->cache->max_file_path_cache_items = 1;
+		$this->cache->file_path_cache_cleanup_size = 1;
+
+		$file = new ReflectionMethod( $this->cache, 'get_focus_file' );
+		$file->setAccessible( true );
+		$file->invoke( $this->cache, 'first_path_key', $group );
+		$file->invoke( $this->cache, 'second_path_key', $group );
+
+		$this->assertCount( 1, $this->cache->file_path_cache );
+	}
+
+	/**
+	 * Test cache key salt and fallback prefix branches.
+	 */
+	public function test_key_salt_and_empty_prefix_fallback() {
+		$salt = new ReflectionMethod( $this->cache, 'salt_keys' );
+		$salt->setAccessible( true );
+		$salt->invoke( $this->cache, 'unit-test-salt' );
+
+		$this->assertSame( 'unit-test-salt:', $this->cache->key_salt );
+
+		$this->cache->key_salt = '';
+		$this->cache->blog_prefix = '';
+		$this->cache->global_prefix = '';
+
+		$this->assertSame( 'WP:fallback_key', $this->cache->key( 'fallback_key', 'fallback_group' ) );
+	}
+
+	/**
+	 * Test empty cache groups normalize to the default group.
+	 */
+	public function test_empty_cache_group_normalizes_to_default() {
+		$this->assertSame( 'default', $this->cache->sanitize_cache_group( '' ) );
+	}
+
+	/**
+	 * Test low disk space prevents persistence and rolls back batch memory writes.
+	 */
+	public function test_low_disk_space_prevents_persistence() {
+		$cache = $this->init_cache();
+		$cache->min_disk_space = PHP_INT_MAX;
+		$error_log = WP_CONTENT_DIR . '/focus-low-disk-test.log';
+		$previous_error_log = ini_get( 'error_log' );
+
+		ini_set( 'error_log', $error_log );
+
+		try {
+			$this->assertFalse( $cache->set( 'low_disk_set', 'value', 'low_disk_group' ) );
+
+			$add_results = $cache->add_multiple( array( 'add_key' => 'value' ), 'low_disk_add_group' );
+			$set_results = $cache->set_multiple( array( 'set_key' => 'value' ), 'low_disk_set_group' );
+
+			$this->assertSame( array( 'add_key' => false ), $add_results );
+			$this->assertSame( array( 'set_key' => false ), $set_results );
+			$this->assertArrayNotHasKey( $cache->key( 'add_key', 'low_disk_add_group' ), $cache->cache['low_disk_add_group'] );
+			$this->assertArrayNotHasKey( $cache->key( 'set_key', 'low_disk_set_group' ), $cache->cache['low_disk_set_group'] );
+		} finally {
+			ini_set( 'error_log', false === $previous_error_log ? '' : $previous_error_log );
+			if ( file_exists( $error_log ) ) {
+				unlink( $error_log );
+			}
 		}
 	}
 
 	/**
-	 * Test that non-persistent groups are excluded from preload
+	 * Test prefetch load and save no-op when a generated key is unavailable.
 	 */
-	public function test_preload_excludes_non_persistent_groups() {
-		// Enable preload for this test
-		$this->enable_preload_for_testing();
+	public function test_prefetch_noops_when_prefetch_key_is_unavailable() {
+		$cache = new Tests_Focus_False_Prefetch_Key_Cache();
+		$cache->cache['manual_group']['manual_key'] = 'manual_value';
 
-		// Simulate GET request context for preload to work
-		$original_request_method = $_SERVER['REQUEST_METHOD'] ?? null;
-		$_SERVER['REQUEST_METHOD'] = 'GET';
+		$cache->load_prefetch_manifest();
+		$cache->save_prefetch_manifest();
+
+		$this->assertArrayNotHasKey( $cache->prefetch_group, $cache->cache );
+	}
+
+	/**
+	 * Test memory cleanup trims the expiration cache.
+	 */
+	public function test_memory_cleanup_trims_expiration_cache() {
+		$this->cache->max_expiration_cache_items = 1;
+		$this->cache->expiration_cache_cleanup_size = 1;
+		$this->cache->max_file_path_cache_items = 1;
+		$this->cache->file_path_cache_cleanup_size = 1;
+		$this->cache->file_path_cache = array(
+			'first' => '/tmp/first.php',
+			'second' => '/tmp/second.php',
+		);
+		$this->cache->expiration_cache = array(
+			'first' => array(
+				'mtime' => time(),
+				'calculated_at' => time(),
+			),
+			'second' => array(
+				'mtime' => time(),
+				'calculated_at' => time(),
+			),
+		);
+
+		$method = new ReflectionMethod( $this->cache, 'maybe_cleanup_memory' );
+		$method->setAccessible( true );
+		$method->invoke( $this->cache );
+
+		$this->assertSame( array( 'second' ), array_keys( $this->cache->file_path_cache ) );
+		$this->assertSame( array( 'second' ), array_keys( $this->cache->expiration_cache ) );
+	}
+
+	private function enable_prefetch_for_testing() {
+		$this->cache->test_prefetch_enabled = true;
+	}
+
+	private function set_prefetch_request_context( $host = 'example.com', $uri = '/test-page', $method = 'GET', $https = '' ) {
+		$_SERVER['HTTP_HOST'] = $host;
+		$_SERVER['REQUEST_URI'] = $uri;
+		$_SERVER['REQUEST_METHOD'] = $method;
+
+		if ( '' === $https ) {
+			unset( $_SERVER['HTTPS'] );
+		} else {
+			$_SERVER['HTTPS'] = $https;
+		}
+	}
+
+	private function get_prefetch_manifest( $cache, $prefetch_key ) {
+		$found = null;
+		return $cache->get( $prefetch_key, $cache->prefetch_group, false, $found, false );
+	}
+
+	/**
+	 * Test cache prefetch manifest save and hydrate functionality.
+	 */
+	public function test_cache_prefetch_manifest_hydrates_runtime_cache() {
+		$this->enable_prefetch_for_testing();
+		$this->set_prefetch_request_context();
+
+		$group = 'test_prefetch';
+		$key1 = 'prefetch_key1';
+		$key2 = 'prefetch_key2';
+
+		$this->cache->set( $key1, 'prefetch_value1', $group );
+		$this->cache->set( $key2, 'prefetch_value2', $group );
+
+		$prefetch_key = $this->cache->get_prefetch_key();
+		$this->assertNotEmpty( $prefetch_key, 'Prefetch key should be generated' );
+
+		$this->cache->save_prefetch_manifest();
+
+		$manifest = $this->get_prefetch_manifest( $this->cache, $prefetch_key );
+		$this->assertIsArray( $manifest, 'Prefetch manifest should be stored as an object cache item' );
+		$this->assertArrayHasKey( $group, $manifest['groups'], 'Prefetch manifest should include the runtime cache group' );
+		$this->assertContains( $this->cache->key( $key1, $group ), $manifest['groups'][ $group ], 'Manifest should store normalized cache keys' );
+		$this->assertContains( $this->cache->key( $key2, $group ), $manifest['groups'][ $group ], 'Manifest should merge keys from the same group' );
+
+		$fresh_cache = $this->init_cache();
+		$fresh_cache->test_prefetch_enabled = true;
+		$fresh_cache->load_prefetch_manifest();
+
+		$normalized_key1 = $fresh_cache->key( $key1, $group );
+		$normalized_key2 = $fresh_cache->key( $key2, $group );
+
+		$this->assertArrayHasKey( $group, $fresh_cache->cache, 'Prefetch should hydrate the group into runtime cache' );
+		$this->assertArrayHasKey( $normalized_key1, $fresh_cache->cache[ $group ], 'Prefetch should hydrate key one into runtime cache' );
+		$this->assertArrayHasKey( $normalized_key2, $fresh_cache->cache[ $group ], 'Prefetch should hydrate key two into runtime cache' );
+		$this->assertSame( 'prefetch_value1', $fresh_cache->cache[ $group ][ $normalized_key1 ] );
+		$this->assertSame( 'prefetch_value2', $fresh_cache->cache[ $group ][ $normalized_key2 ] );
+	}
+
+	/**
+	 * Test hydrated prefetch keys are carried forward until the manifest expires.
+	 */
+	public function test_prefetch_manifest_carries_forward_hydrated_keys_until_ttl() {
+		$this->enable_prefetch_for_testing();
+		$this->set_prefetch_request_context( 'example.com', '/prefetch-carry-forward' );
+
+		$group = 'test_prefetch_carry_forward';
+		$touched_key = 'touched_key';
+		$hydrated_only_key = 'hydrated_only_key';
+
+		$this->cache->set( $touched_key, 'touched_value', $group );
+		$this->cache->set( $hydrated_only_key, 'hydrated_only_value', $group );
+
+		$prefetch_key = $this->cache->get_prefetch_key();
+		$this->cache->save_prefetch_manifest();
+
+		$fresh_cache = $this->init_cache();
+		$fresh_cache->test_prefetch_enabled = true;
+		$fresh_cache->load_prefetch_manifest();
+
+		$this->assertSame( 'touched_value', $fresh_cache->get( $touched_key, $group ) );
+
+		$fresh_cache->save_prefetch_manifest();
+
+		$manifest = $this->get_prefetch_manifest( $fresh_cache, $prefetch_key );
+
+		$this->assertIsArray( $manifest );
+		$this->assertArrayHasKey( $group, $manifest['groups'] );
+		$this->assertContains( $fresh_cache->key( $touched_key, $group ), $manifest['groups'][ $group ] );
+		$this->assertContains( $fresh_cache->key( $hydrated_only_key, $group ), $manifest['groups'][ $group ] );
+	}
+
+	/**
+	 * Test that prefetch stores key manifests, not stale value snapshots.
+	 */
+	public function test_prefetch_loads_current_values_instead_of_saved_snapshots() {
+		$this->enable_prefetch_for_testing();
+		$this->set_prefetch_request_context();
+
+		$group = 'test_prefetch_freshness';
+		$key = 'fresh_key';
+
+		$this->cache->set( $key, 'old-value', $group );
+		$this->cache->save_prefetch_manifest();
+
+		$this->cache->set( $key, 'new-value', $group );
+
+		$fresh_cache = $this->init_cache();
+		$fresh_cache->test_prefetch_enabled = true;
+		$fresh_cache->load_prefetch_manifest();
+
+		$normalized_key = $fresh_cache->key( $key, $group );
+		$this->assertSame( 'new-value', $fresh_cache->cache[ $group ][ $normalized_key ], 'Prefetch should load the current persistent value' );
+	}
+
+	/**
+	 * Test that non-persistent and internal prefetch groups are excluded.
+	 */
+	public function test_prefetch_manifest_excludes_non_persistent_and_internal_groups() {
+		$this->enable_prefetch_for_testing();
+		$this->set_prefetch_request_context();
 
 		$persistent_group = 'test_persistent';
-		$non_persistent_group = 'comment'; // This is in non_persistent_groups by default
+		$non_persistent_group = 'comment';
 
-		// Verify that comment group is indeed non-persistent
-		$this->assertFalse($this->cache->should_persist($non_persistent_group), 'Comment group should be non-persistent');
+		$this->cache->set( 'persistent_key', 'persistent_value', $persistent_group );
+		$this->cache->set( 'non_persistent_key', 'non_persistent_value', $non_persistent_group );
+		$this->cache->set( 'internal_key', 'internal_value', $this->cache->prefetch_group );
 
-		// Add data to both persistent and non-persistent groups
-		$this->cache->set('persistent_key', 'persistent_value', $persistent_group);
-		$this->cache->set('non_persistent_key', 'non_persistent_value', $non_persistent_group);
+		$prefetch_key = $this->cache->get_prefetch_key();
+		$this->cache->save_prefetch_manifest();
+		$manifest = $this->get_prefetch_manifest( $this->cache, $prefetch_key );
 
-		// Save preload
-		$this->cache->save_preload_cache();
-
-		// Create fresh cache instance
-		$fresh_cache = $this->init_cache();
-
-		// Persistent data should be preloaded
-		$this->assertEquals('persistent_value', $fresh_cache->get('persistent_key', $persistent_group), 'Persistent group data should be preloaded');
-		
-		// Non-persistent data should NOT be preloaded (should return false)
-		$this->assertFalse($fresh_cache->get('non_persistent_key', $non_persistent_group), 'Non-persistent group data should NOT be preloaded');
-
-		// Restore original server variables
-		if ($original_request_method !== null) {
-			$_SERVER['REQUEST_METHOD'] = $original_request_method;
-		} else {
-			unset($_SERVER['REQUEST_METHOD']);
-		}
+		$this->assertArrayHasKey( $persistent_group, $manifest['groups'], 'Persistent groups should be included' );
+		$this->assertArrayNotHasKey( $non_persistent_group, $manifest['groups'], 'Non-persistent groups should be excluded' );
+		$this->assertArrayNotHasKey( $this->cache->prefetch_group, $manifest['groups'], 'Prefetch group should not recursively prefetch itself' );
 	}
 
 	/**
-	 * Test preload context filtering - WP-CLI should disable preload
+	 * Test prefetch key normalization for query strings.
 	 */
-	public function test_preload_disabled_in_wp_cli() {
-		// Enable preload for this test
-		$this->enable_preload_for_testing();
+	public function test_prefetch_key_normalizes_query_order() {
+		$this->enable_prefetch_for_testing();
 
-		// Set up proper server context
-		$_SERVER['REQUEST_METHOD'] = 'GET';
-		$_SERVER['HTTP_HOST'] = 'example.com';
-		$_SERVER['REQUEST_URI'] = '/test';
+		$this->set_prefetch_request_context( 'example.com', '/test-page?b=2&a=1' );
+		$_SERVER['QUERY_STRING'] = 'b=2&a=1';
+		$key1 = $this->cache->get_prefetch_key();
 
-		// First, test that preload works when WP-CLI is false
-		$this->cache->is_wp_cli = false;
-		$preload_key = $this->cache->get_preload_key();
-		$this->assertNotFalse($preload_key, 'Preload should work when not in WP-CLI context');
+		$this->set_prefetch_request_context( 'example.com', '/test-page?a=1&b=2' );
+		$_SERVER['QUERY_STRING'] = 'a=1&b=2';
+		$key2 = $this->cache->get_prefetch_key();
 
-		// Now test that preload is disabled when WP-CLI is true
+		$this->assertSame( $key1, $key2, 'Equivalent query strings should produce the same prefetch key' );
+	}
+
+	/**
+	 * Test prefetch remains enabled for non-GET request types.
+	 */
+	public function test_prefetch_key_is_available_for_non_get_requests() {
+		$this->enable_prefetch_for_testing();
+		$this->set_prefetch_request_context( 'example.com', '/post-target', 'POST' );
+
+		$prefetch_key = $this->cache->get_prefetch_key();
+
+		$this->assertNotFalse( $prefetch_key, 'Prefetch should work for POST requests when enabled' );
+		$this->assertNotEmpty( $prefetch_key, 'Prefetch key should not be empty for POST requests' );
+	}
+
+	/**
+	 * Test prefetch key generation in CLI-like contexts.
+	 */
+	public function test_prefetch_key_is_available_for_cli_contexts() {
+		$this->enable_prefetch_for_testing();
+
+		unset( $_SERVER['HTTP_HOST'], $_SERVER['REQUEST_URI'], $_SERVER['QUERY_STRING'] );
+		$_SERVER['SCRIPT_NAME'] = 'wp';
+		$_SERVER['argv'] = array( 'wp', 'cron', 'event', 'run' );
 		$this->cache->is_wp_cli = true;
-		$preload_key = $this->cache->get_preload_key();
-		$this->assertFalse($preload_key, 'Preload should be disabled in WP-CLI context');
+
+		$prefetch_key = $this->cache->get_prefetch_key();
+
+		$this->assertNotFalse( $prefetch_key, 'Prefetch should work for WP-CLI contexts when enabled' );
+		$this->assertNotEmpty( $prefetch_key, 'Prefetch key should not be empty for CLI contexts' );
 	}
 
 	/**
-	 * Test preload context filtering - CRON should disable preload
+	 * Test prefetch works with different domains.
 	 */
-	public function test_preload_disabled_in_cron() {
-		// Enable preload for this test
-		$this->enable_preload_for_testing();
+	public function test_prefetch_multi_domain_support() {
+		$this->enable_prefetch_for_testing();
 
-		// Set up proper server context
-		$_SERVER['REQUEST_METHOD'] = 'GET';
-		$_SERVER['HTTP_HOST'] = 'example.com';
-		$_SERVER['REQUEST_URI'] = '/test';
+		$this->set_prefetch_request_context( 'domain1.com', '/same-page' );
+		$key1 = $this->cache->get_prefetch_key();
 
-		// First, test that preload works when CRON is false
-		$this->cache->is_doing_cron = false;
-		$preload_key = $this->cache->get_preload_key();
-		$this->assertNotFalse($preload_key, 'Preload should work when not in CRON context');
+		$this->set_prefetch_request_context( 'domain2.com', '/same-page' );
+		$key2 = $this->cache->get_prefetch_key();
 
-		// Now test that preload is disabled when CRON is true
-		$this->cache->is_doing_cron = true;
-		$preload_key = $this->cache->get_preload_key();
-		$this->assertFalse($preload_key, 'Preload should be disabled in CRON context');
+		$this->assertNotFalse( $key1, 'Domain 1 should generate a valid prefetch key' );
+		$this->assertNotFalse( $key2, 'Domain 2 should generate a valid prefetch key' );
+		$this->assertNotEquals( $key1, $key2, 'Different domains should generate different prefetch keys' );
 	}
 
 	/**
-	 * Test preload context filtering - XML-RPC should disable preload
+	 * Test the old preload method names delegate to the prefetch implementation.
 	 */
-	public function test_preload_disabled_in_xmlrpc() {
-		// Enable preload for this test
-		$this->enable_preload_for_testing();
+	public function test_legacy_preload_wrappers_delegate_to_prefetch() {
+		$this->enable_prefetch_for_testing();
+		$this->set_prefetch_request_context( 'example.com', '/legacy-preload' );
 
-		// Set up proper server context
-		$_SERVER['REQUEST_METHOD'] = 'GET';
-		$_SERVER['HTTP_HOST'] = 'example.com';
-		$_SERVER['REQUEST_URI'] = '/test';
+		$group = 'test_legacy_preload';
+		$this->cache->set( 'legacy_key', 'legacy_value', $group );
 
-		// First, test that preload works when XML-RPC is false
-		$this->cache->is_xmlrpc_request = false;
-		$preload_key = $this->cache->get_preload_key();
-		$this->assertNotFalse($preload_key, 'Preload should work when not in XML-RPC context');
+		$prefetch_key = $this->cache->get_prefetch_key();
 
-		// Now test that preload is disabled when XML-RPC is true
-		$this->cache->is_xmlrpc_request = true;
-		$preload_key = $this->cache->get_preload_key();
-		$this->assertFalse($preload_key, 'Preload should be disabled in XML-RPC context');
+		$this->assertSame( $prefetch_key, $this->cache->get_preload_key() );
+
+		$this->cache->save_preload_cache();
+		$manifest = $this->get_prefetch_manifest( $this->cache, $prefetch_key );
+
+		$this->assertIsArray( $manifest );
+		$this->assertArrayHasKey( $group, $manifest['groups'] );
+		$this->assertContains( $this->cache->key( 'legacy_key', $group ), $manifest['groups'][ $group ] );
 	}
 
 	/**
-	 * Test preload context filtering - non-GET HTTP methods should disable preload
+	 * Test the prefetch shutdown hook is registered once at the latest priority.
 	 */
-	public function test_preload_disabled_for_non_get_requests() {
-		// Enable preload for this test
-		$this->enable_preload_for_testing();
+	public function test_prefetch_shutdown_hook_registers_once() {
+		$this->cache->test_prefetch_enabled = true;
+		$this->cache->prefetch_shutdown_registered = false;
 
-		// Set up proper context (ensure no blocking contexts)
-		$this->cache->is_wp_cli = false;
-		$this->cache->is_doing_cron = false;
-		$this->cache->is_xmlrpc_request = false;
-		$_SERVER['HTTP_HOST'] = 'example.com';
-		$_SERVER['REQUEST_URI'] = '/test';
+		$method = new ReflectionMethod( $this->cache, 'register_prefetch_shutdown_hook' );
+		$method->setAccessible( true );
 
-		$original_request_method = $_SERVER['REQUEST_METHOD'] ?? null;
+		$method->invoke( $this->cache );
 
-		// Test various non-GET methods - these should all return false
-		$non_get_methods = ['POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS'];
-		
-		foreach ($non_get_methods as $method) {
-			$_SERVER['REQUEST_METHOD'] = $method;
-			
-			$preload_key = $this->cache->get_preload_key();
-			$this->assertFalse($preload_key, "Preload should be disabled for {$method} requests");
-		}
+		$this->assertTrue( $this->cache->prefetch_shutdown_registered );
+		$this->assertSame( PHP_INT_MAX, has_action( 'shutdown', array( $this->cache, 'save_prefetch_manifest' ) ) );
 
-		// Test that GET works when no blocking contexts are present
-		$_SERVER['REQUEST_METHOD'] = 'GET';
-		
-		$preload_key = $this->cache->get_preload_key();
-		$this->assertNotFalse($preload_key, 'Preload should work for GET requests');
-		$this->assertNotEmpty($preload_key, 'Preload key should not be empty for GET requests');
+		$method->invoke( $this->cache );
 
-		// Restore original server variables
-		if ($original_request_method !== null) {
-			$_SERVER['REQUEST_METHOD'] = $original_request_method;
-		} else {
-			unset($_SERVER['REQUEST_METHOD']);
-		}
+		$this->assertTrue( $this->cache->prefetch_shutdown_registered );
+
+		remove_action( 'shutdown', array( $this->cache, 'save_prefetch_manifest' ), PHP_INT_MAX );
 	}
 
 	/**
-	 * Test preload works with different domains (multi-domain support)
+	 * Test prefetch is a no-op when disabled.
 	 */
-	public function test_preload_multi_domain_support() {
-		$this->enable_preload_for_testing();
-
-		// Set up context variables to allow preload
-		$this->cache->is_wp_cli = false;
-		$this->cache->is_doing_cron = false;
-		$this->cache->is_xmlrpc_request = false;
-
-		$original_request_method = $_SERVER['REQUEST_METHOD'] ?? null;
-		$original_http_host = $_SERVER['HTTP_HOST'] ?? null;
-		$original_request_uri = $_SERVER['REQUEST_URI'] ?? null;
-
-		$_SERVER['REQUEST_METHOD'] = 'GET';
-		$_SERVER['REQUEST_URI'] = '/same-page';
-
-		// Test that different domains generate different preload keys
-		$_SERVER['HTTP_HOST'] = 'domain1.com';
-		$key1 = $this->cache->get_preload_key();
-
-		$_SERVER['HTTP_HOST'] = 'domain2.com';
-		$key2 = $this->cache->get_preload_key();
-
-		$this->assertNotFalse($key1, 'Domain 1 should generate a valid preload key');
-		$this->assertNotFalse($key2, 'Domain 2 should generate a valid preload key');
-		$this->assertNotEmpty($key1, 'Domain 1 key should not be empty');
-		$this->assertNotEmpty($key2, 'Domain 2 key should not be empty');
-		$this->assertNotEquals($key1, $key2, 'Different domains should generate different preload keys');
-
-		// Restore original server variables
-		if ($original_request_method !== null) {
-			$_SERVER['REQUEST_METHOD'] = $original_request_method;
-		} else {
-			unset($_SERVER['REQUEST_METHOD']);
+	public function test_prefetch_disabled_returns_false_and_noops() {
+		if ( WP_FOCUS_CACHE_PREFETCH ) {
+			$this->markTestSkipped( 'Prefetch is enabled by constant in this environment.' );
 		}
-		if ($original_http_host !== null) {
-			$_SERVER['HTTP_HOST'] = $original_http_host;
-		} else {
-			unset($_SERVER['HTTP_HOST']);
-		}
-		if ($original_request_uri !== null) {
-			$_SERVER['REQUEST_URI'] = $original_request_uri;
-		} else {
-			unset($_SERVER['REQUEST_URI']);
-		}
+
+		$this->assertFalse( $this->cache->get_prefetch_key() );
+
+		$this->cache->load_prefetch_manifest();
+		$this->cache->save_prefetch_manifest();
+
+		$this->assertArrayNotHasKey( $this->cache->prefetch_group, $this->cache->cache );
+	}
+
+	/**
+	 * Test prefetch key generation uses SERVER_NAME and forwarded HTTPS data when needed.
+	 */
+	public function test_prefetch_key_uses_server_name_and_forwarded_proto() {
+		$this->enable_prefetch_for_testing();
+
+		unset( $_SERVER['HTTP_HOST'], $_SERVER['HTTPS'], $_SERVER['QUERY_STRING'] );
+		$_SERVER['SERVER_NAME'] = 'Example.COM';
+		$_SERVER['REQUEST_URI'] = '/secure-page';
+		$_SERVER['HTTP_X_FORWARDED_PROTO'] = 'https';
+
+		$key_from_server_name = $this->cache->get_prefetch_key();
+
+		$this->set_prefetch_request_context( 'example.com', '/secure-page', 'GET', 'on' );
+		unset( $_SERVER['HTTP_X_FORWARDED_PROTO'] );
+
+		$this->assertSame( $key_from_server_name, $this->cache->get_prefetch_key() );
+	}
+
+	/**
+	 * Test QUERY_STRING is used when REQUEST_URI does not contain a query string.
+	 */
+	public function test_prefetch_key_uses_query_string_fallback() {
+		$this->enable_prefetch_for_testing();
+
+		$this->set_prefetch_request_context( 'example.com', '/query-fallback' );
+		$_SERVER['QUERY_STRING'] = 'b=2&a=1';
+		$key1 = $this->cache->get_prefetch_key();
+
+		$this->set_prefetch_request_context( 'example.com', '/query-fallback?a=1&b=2' );
+		unset( $_SERVER['QUERY_STRING'] );
+		$key2 = $this->cache->get_prefetch_key();
+
+		$this->assertSame( $key1, $key2 );
+	}
+
+	/**
+	 * Test nested query parameters are sorted recursively.
+	 */
+	public function test_prefetch_key_sorts_nested_query_args() {
+		$this->enable_prefetch_for_testing();
+
+		$this->set_prefetch_request_context( 'example.com', '/nested-query?outer[z]=1&outer[y]=2&b=3' );
+		$key1 = $this->cache->get_prefetch_key();
+
+		$this->set_prefetch_request_context( 'example.com', '/nested-query?b=3&outer[y]=2&outer[z]=1' );
+		$key2 = $this->cache->get_prefetch_key();
+
+		$this->assertSame( $key1, $key2 );
+	}
+
+	/**
+	 * Test root request paths normalize with a trailing slash.
+	 */
+	public function test_prefetch_key_normalizes_empty_path_to_root() {
+		$this->enable_prefetch_for_testing();
+
+		$this->set_prefetch_request_context( 'example.com', '' );
+		$key1 = $this->cache->get_prefetch_key();
+
+		$this->set_prefetch_request_context( 'example.com', '/' );
+		$key2 = $this->cache->get_prefetch_key();
+
+		$this->assertSame( $key1, $key2 );
+	}
+
+	/**
+	 * Test malformed saved manifests are ignored.
+	 */
+	public function test_prefetch_load_ignores_malformed_manifests() {
+		$this->enable_prefetch_for_testing();
+		$this->set_prefetch_request_context( 'example.com', '/malformed-manifest' );
+
+		$prefetch_key = $this->cache->get_prefetch_key();
+
+		$this->cache->set( $prefetch_key, 'not-a-manifest', $this->cache->prefetch_group );
+		$this->cache->load_prefetch_manifest();
+
+		$this->cache->set( $prefetch_key, array( 'groups' => 'not-an-array' ), $this->cache->prefetch_group );
+		$this->cache->load_prefetch_manifest();
+
+		$this->cache->set(
+			$prefetch_key,
+			array(
+				'groups' => array(
+					123 => array( 'integer-group-name' ),
+					$this->cache->prefetch_group => array( 'recursive-prefetch' ),
+					'empty_group' => array(),
+					'blank_keys' => array( '', '   ' ),
+				),
+			),
+			$this->cache->prefetch_group
+		);
+		$this->cache->load_prefetch_manifest();
+
+		$this->assertArrayNotHasKey( 'empty_group', $this->cache->cache );
+		$this->assertArrayNotHasKey( 'blank_keys', $this->cache->cache );
+	}
+
+	/**
+	 * Test prefetch manifest saving no-ops when there are no persistable groups.
+	 */
+	public function test_prefetch_save_noops_without_persistable_groups() {
+		$this->enable_prefetch_for_testing();
+		$this->set_prefetch_request_context( 'example.com', '/no-persistable-groups' );
+
+		$prefetch_key = $this->cache->get_prefetch_key();
+
+		$this->cache->save_prefetch_manifest();
+		$this->assertFalse( $this->get_prefetch_manifest( $this->cache, $prefetch_key ) );
+
+		$this->cache->set( 'comment_key', 'comment_value', 'comment' );
+		$this->cache->set( 'prefetch_key', 'prefetch_value', $this->cache->prefetch_group );
+		$this->cache->save_prefetch_manifest();
+
+		$this->assertFalse( $this->get_prefetch_manifest( $this->cache, $prefetch_key ) );
+	}
+
+	/**
+	 * Test prefetch manifest saving skips groups with no valid keys.
+	 */
+	public function test_prefetch_save_skips_groups_without_valid_keys() {
+		$this->enable_prefetch_for_testing();
+		$this->set_prefetch_request_context( 'example.com', '/invalid-prefetch-keys' );
+
+		$prefetch_key = $this->cache->get_prefetch_key();
+		$this->cache->cache['invalid_prefetch_keys'] = array( '' => 'blank-key' );
+
+		$this->cache->save_prefetch_manifest();
+
+		$this->assertFalse( $this->get_prefetch_manifest( $this->cache, $prefetch_key ) );
+	}
+
+	/**
+	 * Test prefetch manifest key sanitization.
+	 */
+	public function test_prefetch_sanitizes_manifest_keys() {
+		$method = new ReflectionMethod( $this->cache, 'sanitize_prefetch_keys' );
+		$method->setAccessible( true );
+
+		$this->assertSame(
+			array( 'valid', 3, '0' ),
+			$method->invoke(
+				$this->cache,
+				array( 'valid', 'valid', '', '   ', 3, '0' )
+			)
+		);
 	}
 }

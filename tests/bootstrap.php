@@ -34,7 +34,14 @@ if ( ! is_dir( dirname( $cache_dest ) ) ) {
 }
 
 if ( file_exists( $cache_source ) ) {
-	copy( $cache_source, $cache_dest );
+	if ( file_exists( $cache_dest ) || is_link( $cache_dest ) ) {
+		unlink( $cache_dest );
+	}
+
+	if ( ! symlink( $cache_source, $cache_dest ) ) {
+		copy( $cache_source, $cache_dest );
+	}
+
 	echo "FOCUS object cache installed at: " . $cache_dest . "\n";
 }
 

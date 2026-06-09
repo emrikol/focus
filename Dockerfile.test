@@ -9,8 +9,6 @@ RUN apt-get update -qq && apt-get install -y -qq \
     curl \
     libzip-dev \
     mariadb-client \
-    subversion \
-    htop \
     libpng-dev \
     libjpeg-dev \
     libfreetype6-dev \
@@ -19,6 +17,12 @@ RUN apt-get update -qq && apt-get install -y -qq \
 # Install and configure PHP extensions (also slow)
 RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install mysqli zip gd
+
+# Install PCOV for fast, stable PHPUnit coverage. Keep it disabled unless a
+# coverage run explicitly enables it.
+RUN pecl install pcov \
+    && docker-php-ext-enable pcov \
+    && echo "pcov.enabled=0" >> /usr/local/etc/php/conf.d/docker-php-ext-pcov.ini
 
 # Install Composer
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer

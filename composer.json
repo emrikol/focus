@@ -15,20 +15,31 @@
   },
   "require-dev": {
     "dealerdirect/phpcodesniffer-composer-installer": "^1.0",
+    "emrikol/phpcs": "^0.3.0",
     "phpcompatibility/phpcompatibility-wp": "^2",
     "phpunit/phpunit": "^9.6",
     "wp-coding-standards/wpcs": "^3.0",
     "wpreadme2markdown/wp2md": "*",
     "yoast/phpunit-polyfills": "^1.0"
   },
+  "repositories": [
+    {
+      "type": "vcs",
+      "url": "https://github.com/emrikol/phpcs"
+    }
+  ],
   "config": {
+    "platform": {
+      "php": "8.0.30"
+    },
     "allow-plugins": {
       "dealerdirect/phpcodesniffer-composer-installer": true
     }
   },
   "scripts": {
-    "lint": "phpcs --extensions=php .",
-    "lint:fix": "phpcbf --extensions=php .",
+    "lint": "phpcs",
+    "lint:fix": "phpcbf",
+    "check:cache-api": "php tools/check-cache-api-parity.php",
     "test": "phpunit",
     "readme": "wp2md convert readme.txt > readme.md"
   }

@@ -3,12 +3,13 @@
 set -euo pipefail
 
 # --- CONFIGURATION ---
-PHP_VERSION="8.2"
-WP_VERSION="trunk"
+PHP_VERSION="${PHP_VERSION:-8.2}"
+WP_VERSION="${WP_VERSION:-7.0}"
 DB_CONTAINER_NAME="wp-test-db-$$"
 PHP_CONTAINER_NAME="wp-test-runner-$$"
 DB_VOLUME_NAME="wp-test-db-volume-$$"
-TEST_IMAGE_NAME="focus-test-env-php8.2"
+TEST_IMAGE_VERSION="v2"
+TEST_IMAGE_NAME="focus-test-env-php${PHP_VERSION}-${TEST_IMAGE_VERSION}"
 COMPOSER_CACHE_VOLUME="focus-composer-cache"
 WP_TESTS_CACHE_VOLUME="focus-wp-tests-cache"
 DB_ROOT_PASSWORD="password"
@@ -18,16 +19,18 @@ DB_PASSWORD="password"
 TEST_DB_PORT="3307"
 DEBUG=false
 SHELL_MODE=false
+PHPUNIT_CONFIG="phpunit.xml.dist"
 PHPUNIT_ARGS=""
 PHPUNIT_GROUPS=""
 RUN_ALL_TESTS=false
+COVERAGE=false
 
 # --- ARG PARSING ---
 while [[ $# -gt 0 ]]; do
   case $1 in
     --debug) DEBUG=true ;;
     --shell) SHELL_MODE=true ;;
-    --multisite) PHPUNIT_ARGS="$PHPUNIT_ARGS -c tests/phpunit/multisite.xml" ;;
+    --multisite) PHPUNIT_CONFIG="tests/phpunit/multisite.xml" ;;
     --all) RUN_ALL_TESTS=true ;;
     --ajax)
       if [[ -n "$PHPUNIT_GROUPS" ]]; then
@@ -91,7 +94,7 @@ while [[ $# -gt 0 ]]; do
       echo ""
       echo "Environment Options:"
       echo "  --php VERSION    PHP version to use (default: 8.2)"
-      echo "  --wp VERSION     WordPress version to use (default: trunk)"
+      echo "  --wp VERSION     WordPress version to use (default: 7.0)"
       echo ""
       echo "Utility Options:"
       echo "  --lint           Run PHP syntax check only"
@@ -107,7 +110,7 @@ while [[ $# -gt 0 ]]; do
       echo "  --stop-on-skipped Stop immediately when a test is skipped"
       echo "  --stop-on-error  Stop immediately when an error occurs"
       echo "  --list-tests     List all available tests without running them"
-      echo "  --coverage-text  Show test coverage information (requires Xdebug)"
+      echo "  --coverage-text  Show test coverage information (uses phpdbg in Docker)"
       echo "  --filter PATTERN Run only tests matching pattern"
       echo "  --group NAME     Run only tests in specified group"
       echo "  --exclude-group NAME Exclude tests in specified group"
@@ -132,7 +135,11 @@ while [[ $# -gt 0 ]]; do
       echo "  $0 --multisite --verbose --testdox --stop-on-failure"
       exit 0
       ;;
-    --filter|--testdox|--coverage-*)
+    --coverage-*)
+      COVERAGE=true
+      PHPUNIT_ARGS="$PHPUNIT_ARGS $1"
+      ;;
+    --filter|--testdox)
       # Pass PHPUnit-specific args through
       PHPUNIT_ARGS="$PHPUNIT_ARGS $1"
       ;;
@@ -221,7 +228,7 @@ check_docker_installed
 start_docker_if_needed
 
 # Build test image if needed  
-TEST_IMAGE_NAME="focus-test-env-php$PHP_VERSION"
+TEST_IMAGE_NAME="focus-test-env-php${PHP_VERSION}-${TEST_IMAGE_VERSION}"
 if ! docker image inspect "$TEST_IMAGE_NAME" >/dev/null 2>&1; then
   echo "🔨 Building cached test environment for PHP $PHP_VERSION (one-time setup)..."
   docker build --build-arg PHP_VERSION="$PHP_VERSION" -t "$TEST_IMAGE_NAME" -f Dockerfile.test . >/dev/null
@@ -247,7 +254,7 @@ if [ ! -d "tests" ]; then
 fi
 
 # Validate multisite configuration if --multisite flag was used
-if [[ "$PHPUNIT_ARGS" == *"multisite.xml"* ]]; then
+if [[ "$PHPUNIT_CONFIG" == *"multisite.xml"* ]]; then
   if [ ! -f "tests/phpunit/multisite.xml" ]; then
     echo "❌ Multisite configuration file not found: tests/phpunit/multisite.xml"
     echo "   The --multisite flag requires this configuration file to exist."
@@ -307,49 +314,18 @@ if [ "$SHELL_MODE" = true ]; then
     -e WORDPRESS_DB_USER="$DB_USER" \
     -e WORDPRESS_DB_PASSWORD="$DB_PASSWORD" \
     -e COMPOSER_CACHE_DIR=/cache/composer \
+    -e FOCUS_COVERAGE="$COVERAGE" \
+    -e WP_VERSION="$WP_VERSION" \
+    -e PHPUNIT_CONFIG="$PHPUNIT_CONFIG" \
     "$TEST_IMAGE_NAME" bash -c "
     set -euo pipefail
-    
-    # Fast composer install with cache
-    if [ -f composer.json ]; then
-      composer install --no-interaction --no-progress --quiet --prefer-dist
-      PHPUNIT_CMD='./vendor/bin/phpunit'
-    else
-      PHPUNIT_CMD='phpunit'
-    fi
-    
-    # Use cached WordPress tests or download once
-    WP_TESTS_DIR=/cache/wp-tests/wordpress-tests-lib
-    if [ ! -d \"\$WP_TESTS_DIR/includes\" ]; then
-      echo '📥 Downloading WordPress tests (cached for future runs)...'
-      mkdir -p \$WP_TESTS_DIR
-      if [ \"$WP_VERSION\" = \"trunk\" ]; then
-        WP_TESTS_TAG=\"trunk\"
-      else
-        WP_TESTS_TAG=\"tags/$WP_VERSION\"
-      fi
-      svn export --quiet https://develop.svn.wordpress.org/\$WP_TESTS_TAG/tests/phpunit/includes/ \$WP_TESTS_DIR/includes
-      svn export --quiet https://develop.svn.wordpress.org/\$WP_TESTS_TAG/tests/phpunit/data/ \$WP_TESTS_DIR/data
-      svn export --quiet https://develop.svn.wordpress.org/\$WP_TESTS_TAG/src/ \$WP_TESTS_DIR/src
-      svn export --quiet https://develop.svn.wordpress.org/\$WP_TESTS_TAG/wp-tests-config-sample.php wp-tests-config-$$.php
-    else
-      cp /cache/wp-tests/wp-tests-config.php wp-tests-config-$$.php 2>/dev/null || svn export --quiet https://develop.svn.wordpress.org/trunk/wp-tests-config-sample.php wp-tests-config-$$.php
-    fi
-    
-    # Configure WordPress tests
-    sed -i \"s/youremptytestdbnamehere/$DB_NAME/\" wp-tests-config-$$.php
-    sed -i \"s/yourusernamehere/$DB_USER/\" wp-tests-config-$$.php
-    sed -i \"s/yourpasswordhere/$DB_PASSWORD/\" wp-tests-config-$$.php
-    sed -i \"s|localhost|127.0.0.1:$TEST_DB_PORT|\" wp-tests-config-$$.php
-    mv wp-tests-config-$$.php \$WP_TESTS_DIR/wp-tests-config.php
-    cp \$WP_TESTS_DIR/wp-tests-config.php /cache/wp-tests/ 2>/dev/null || true
-    
-    export WP_TESTS_DIR=\$WP_TESTS_DIR
-    
+    FOCUS_SETUP_ONLY=true bash tools/run-wp-phpunit.sh
+    source /tmp/focus-wp-tests-env
+
     echo
     echo '🎯 DEBUG ENVIRONMENT READY!'
     echo '================================'
-    echo 'PHPUnit command: '\$PHPUNIT_CMD
+    echo 'PHPUnit command: '\"\$PHPUNIT_CMD\"
     echo
     echo 'Available commands:'
     echo '  '\$PHPUNIT_CMD'                           # Run PHPUnit'
@@ -360,10 +336,10 @@ if [ "$SHELL_MODE" = true ]; then
     echo '  exit                                    # Exit shell'
     echo
     echo 'Environment variables:'
-    echo '  WP_TESTS_DIR='\$WP_TESTS_DIR
+    echo '  WP_TESTS_DIR='\"\$WP_TESTS_DIR\"
     echo '  WORDPRESS_DB_HOST=127.0.0.1:$TEST_DB_PORT'
     echo '  WORDPRESS_DB_NAME=$DB_NAME'
-    echo '  PHPUNIT_CMD='\$PHPUNIT_CMD
+    echo '  PHPUNIT_CONFIG=$PHPUNIT_CONFIG'
     echo
     echo '🐚 Dropping into interactive shell...'
     echo 'Type \"exit\" to return to host system.'
@@ -397,53 +373,10 @@ if [ "$RUN_ALL_TESTS" = true ]; then
     -e WORDPRESS_DB_USER="$DB_USER" \
     -e WORDPRESS_DB_PASSWORD="$DB_PASSWORD" \
     -e COMPOSER_CACHE_DIR=/cache/composer \
-    "$TEST_IMAGE_NAME" bash -c "
-    set -euo pipefail
-    
-    # Fast composer install with cache
-    if [ -f composer.json ]; then
-      composer install --no-interaction --no-progress --quiet --prefer-dist
-      PHPUNIT_CMD='./vendor/bin/phpunit'
-    else
-      PHPUNIT_CMD='phpunit'
-    fi
-    
-    # Use cached WordPress tests or download once
-    WP_TESTS_DIR=/cache/wp-tests/wordpress-tests-lib
-    if [ ! -d \"\$WP_TESTS_DIR/includes\" ]; then
-      echo '📥 Downloading WordPress tests (cached for future runs)...'
-      mkdir -p \$WP_TESTS_DIR
-      if [ \"$WP_VERSION\" = \"trunk\" ]; then
-        WP_TESTS_TAG=\"trunk\"
-      else
-        WP_TESTS_TAG=\"tags/$WP_VERSION\"
-      fi
-      svn export --quiet https://develop.svn.wordpress.org/\$WP_TESTS_TAG/tests/phpunit/includes/ \$WP_TESTS_DIR/includes
-      svn export --quiet https://develop.svn.wordpress.org/\$WP_TESTS_TAG/tests/phpunit/data/ \$WP_TESTS_DIR/data
-      svn export --quiet https://develop.svn.wordpress.org/\$WP_TESTS_TAG/src/ \$WP_TESTS_DIR/src
-      svn export --quiet https://develop.svn.wordpress.org/\$WP_TESTS_TAG/wp-tests-config-sample.php wp-tests-config-\$\$.php
-    else
-      cp /cache/wp-tests/wp-tests-config.php wp-tests-config-\$\$.php 2>/dev/null || svn export --quiet https://develop.svn.wordpress.org/trunk/wp-tests-config-sample.php wp-tests-config-\$\$.php
-    fi
-    
-    # Configure WordPress tests
-    sed -i \"s/youremptytestdbnamehere/$DB_NAME/\" wp-tests-config-\$\$.php
-    sed -i \"s/yourusernamehere/$DB_USER/\" wp-tests-config-\$\$.php
-    sed -i \"s/yourpasswordhere/$DB_PASSWORD/\" wp-tests-config-\$\$.php
-    sed -i \"s|localhost|127.0.0.1:$TEST_DB_PORT|\" wp-tests-config-\$\$.php
-    mv wp-tests-config-\$\$.php \$WP_TESTS_DIR/wp-tests-config.php
-    cp \$WP_TESTS_DIR/wp-tests-config.php /cache/wp-tests/ 2>/dev/null || true
-    
-    export WP_TESTS_DIR=\$WP_TESTS_DIR
-    
-    # Clean any cached test data that could contaminate results
-    echo '🧹 Cleaning test cache...'
-    rm -rf \$WP_TESTS_DIR/src/wp-content/focus-object-cache/* 2>/dev/null || true
-    rm -f \$WP_TESTS_DIR/src/wp-content/object-cache.php 2>/dev/null || true
-    
-    echo 'Running as single site... To run multisite, use -c tests/phpunit/multisite.xml'
-    \$PHPUNIT_CMD $PHPUNIT_ARGS $PHPUNIT_GROUPS --colors=always 2>&1 | tee /app/phpunit-single-output.txt
-  "
+    -e FOCUS_COVERAGE="$COVERAGE" \
+    -e WP_VERSION="$WP_VERSION" \
+    -e PHPUNIT_CONFIG="phpunit.xml.dist" \
+    "$TEST_IMAGE_NAME" bash -c "set -o pipefail; bash tools/run-wp-phpunit.sh $PHPUNIT_ARGS $PHPUNIT_GROUPS --colors=always 2>&1 | tee /app/phpunit-single-output.txt"
   SINGLE_SITE_EXIT=$?
   
   # Clean up output file
@@ -466,52 +399,10 @@ if [ "$RUN_ALL_TESTS" = true ]; then
     -e WORDPRESS_DB_USER="$DB_USER" \
     -e WORDPRESS_DB_PASSWORD="$DB_PASSWORD" \
     -e COMPOSER_CACHE_DIR=/cache/composer \
-    "$TEST_IMAGE_NAME" bash -c "
-    set -euo pipefail
-    
-    # Fast composer install with cache
-    if [ -f composer.json ]; then
-      composer install --no-interaction --no-progress --quiet --prefer-dist
-      PHPUNIT_CMD='./vendor/bin/phpunit'
-    else
-      PHPUNIT_CMD='phpunit'
-    fi
-    
-    # Use cached WordPress tests or download once
-    WP_TESTS_DIR=/cache/wp-tests/wordpress-tests-lib
-    if [ ! -d \"\$WP_TESTS_DIR/includes\" ]; then
-      echo '📥 Downloading WordPress tests (cached for future runs)...'
-      mkdir -p \$WP_TESTS_DIR
-      if [ \"$WP_VERSION\" = \"trunk\" ]; then
-        WP_TESTS_TAG=\"trunk\"
-      else
-        WP_TESTS_TAG=\"tags/$WP_VERSION\"
-      fi
-      svn export --quiet https://develop.svn.wordpress.org/\$WP_TESTS_TAG/tests/phpunit/includes/ \$WP_TESTS_DIR/includes
-      svn export --quiet https://develop.svn.wordpress.org/\$WP_TESTS_TAG/tests/phpunit/data/ \$WP_TESTS_DIR/data
-      svn export --quiet https://develop.svn.wordpress.org/\$WP_TESTS_TAG/src/ \$WP_TESTS_DIR/src
-      svn export --quiet https://develop.svn.wordpress.org/\$WP_TESTS_TAG/wp-tests-config-sample.php wp-tests-config-\$\$.php
-    else
-      cp /cache/wp-tests/wp-tests-config.php wp-tests-config-\$\$.php 2>/dev/null || svn export --quiet https://develop.svn.wordpress.org/trunk/wp-tests-config-sample.php wp-tests-config-\$\$.php
-    fi
-    
-    # Configure WordPress tests
-    sed -i \"s/youremptytestdbnamehere/$DB_NAME/\" wp-tests-config-\$\$.php
-    sed -i \"s/yourusernamehere/$DB_USER/\" wp-tests-config-\$\$.php
-    sed -i \"s/yourpasswordhere/$DB_PASSWORD/\" wp-tests-config-\$\$.php
-    sed -i \"s|localhost|127.0.0.1:$TEST_DB_PORT|\" wp-tests-config-\$\$.php
-    mv wp-tests-config-\$\$.php \$WP_TESTS_DIR/wp-tests-config.php
-    cp \$WP_TESTS_DIR/wp-tests-config.php /cache/wp-tests/ 2>/dev/null || true
-    
-    export WP_TESTS_DIR=\$WP_TESTS_DIR
-    
-    # Clean any cached test data that could contaminate results
-    echo '🧹 Cleaning test cache...'
-    rm -rf \$WP_TESTS_DIR/src/wp-content/focus-object-cache/* 2>/dev/null || true
-    rm -f \$WP_TESTS_DIR/src/wp-content/object-cache.php 2>/dev/null || true
-    
-    \$PHPUNIT_CMD -c tests/phpunit/multisite.xml $PHPUNIT_ARGS $PHPUNIT_GROUPS --colors=always 2>&1 | tee /app/phpunit-multisite-output.txt
-  "
+    -e FOCUS_COVERAGE="$COVERAGE" \
+    -e WP_VERSION="$WP_VERSION" \
+    -e PHPUNIT_CONFIG="tests/phpunit/multisite.xml" \
+    "$TEST_IMAGE_NAME" bash -c "set -o pipefail; bash tools/run-wp-phpunit.sh $PHPUNIT_ARGS $PHPUNIT_GROUPS --colors=always 2>&1 | tee /app/phpunit-multisite-output.txt"
   MULTISITE_EXIT=$?
   
   # Clean up output file
@@ -555,55 +446,10 @@ docker run --rm --name "$PHP_CONTAINER_NAME" \
   -e WORDPRESS_DB_USER="$DB_USER" \
   -e WORDPRESS_DB_PASSWORD="$DB_PASSWORD" \
   -e COMPOSER_CACHE_DIR=/cache/composer \
-  "$TEST_IMAGE_NAME" bash -c "
-    set -euo pipefail
-    
-    # Fast composer install with cache
-    if [ -f composer.json ]; then
-      composer install --no-interaction --no-progress --quiet --prefer-dist
-      PHPUNIT_CMD='./vendor/bin/phpunit'
-    else
-      PHPUNIT_CMD='phpunit'
-    fi
-    
-    # Use cached WordPress tests or download once
-    WP_TESTS_DIR=/cache/wp-tests/wordpress-tests-lib
-    if [ ! -d \"\$WP_TESTS_DIR/includes\" ]; then
-      echo '📥 Downloading WordPress tests (cached for future runs)...'
-      mkdir -p \$WP_TESTS_DIR
-      if [ \"$WP_VERSION\" = \"trunk\" ]; then
-        WP_TESTS_TAG=\"trunk\"
-      else
-        WP_TESTS_TAG=\"tags/$WP_VERSION\"
-      fi
-      svn export --quiet https://develop.svn.wordpress.org/\$WP_TESTS_TAG/tests/phpunit/includes/ \$WP_TESTS_DIR/includes
-      svn export --quiet https://develop.svn.wordpress.org/\$WP_TESTS_TAG/tests/phpunit/data/ \$WP_TESTS_DIR/data
-      svn export --quiet https://develop.svn.wordpress.org/\$WP_TESTS_TAG/src/ \$WP_TESTS_DIR/src
-      svn export --quiet https://develop.svn.wordpress.org/\$WP_TESTS_TAG/wp-tests-config-sample.php wp-tests-config-$$.php
-    else
-      cp /cache/wp-tests/wp-tests-config.php wp-tests-config-$$.php 2>/dev/null || svn export --quiet https://develop.svn.wordpress.org/trunk/wp-tests-config-sample.php wp-tests-config-$$.php
-    fi
-    
-    # Configure WordPress tests
-    sed -i \"s/youremptytestdbnamehere/$DB_NAME/\" wp-tests-config-$$.php
-    sed -i \"s/yourusernamehere/$DB_USER/\" wp-tests-config-$$.php
-    sed -i \"s/yourpasswordhere/$DB_PASSWORD/\" wp-tests-config-$$.php
-    sed -i \"s|localhost|127.0.0.1:$TEST_DB_PORT|\" wp-tests-config-$$.php
-    mv wp-tests-config-$$.php \$WP_TESTS_DIR/wp-tests-config.php
-    cp \$WP_TESTS_DIR/wp-tests-config.php /cache/wp-tests/ 2>/dev/null || true
-    
-    export WP_TESTS_DIR=\$WP_TESTS_DIR
-    
-    # Clean any cached test data that could contaminate results
-    echo '🧹 Cleaning test cache...'
-    rm -rf \$WP_TESTS_DIR/src/wp-content/focus-object-cache/* 2>/dev/null || true
-    rm -f \$WP_TESTS_DIR/src/wp-content/object-cache.php 2>/dev/null || true
-    
-    \$PHPUNIT_CMD $PHPUNIT_ARGS $PHPUNIT_GROUPS --colors=always 2>&1 | tee /app/phpunit-output.txt
-    PHPUNIT_EXIT=\$?
-    echo \"PHPUnit exit code: \$PHPUNIT_EXIT\"
-    exit \$PHPUNIT_EXIT
-  "
+  -e FOCUS_COVERAGE="$COVERAGE" \
+  -e WP_VERSION="$WP_VERSION" \
+  -e PHPUNIT_CONFIG="$PHPUNIT_CONFIG" \
+  "$TEST_IMAGE_NAME" bash -c "set -o pipefail; bash tools/run-wp-phpunit.sh $PHPUNIT_ARGS $PHPUNIT_GROUPS --colors=always 2>&1 | tee /app/phpunit-output.txt"
 
 # Clean up output file
 rm -f phpunit-output.txt 2>/dev/null || true

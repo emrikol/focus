@@ -2,11 +2,12 @@
 Contributors: emrikol
 Donate link: http://wordpressfoundation.org/donate/
 Tags: cache, caching
-Requires at least: 4.3.11
-Tested up to: 4.8
-Stable tag: 1.0.1
-License: GPLv2 or later
-License URI: http://www.gnu.org/licenses/gpl-2.0.html
+Requires at least: 6.5
+Tested up to: 7.0
+Requires PHP: 8.0
+Stable tag: 1.0.2
+License: GPLv3 or later
+License URI: http://www.gnu.org/licenses/gpl-3.0.html
 
 File-based Object Cache is Utterly Slow: An Object Caching Dropin for WordPress that uses the local file system.
 
@@ -29,7 +30,11 @@ Install like any other plugin, directly from your plugins page or manually by co
 * Improved: Now flushes cache after enabling, disabling, or updating the drop-in.
 * Improved: Filesystem credential handling is more explicit and avoids side effects.
 * Updated: Code style consistency: spacing, indentation, naming alignment, and translator comments.
+* Updated: WordPress 7.0 compatibility metadata and PHP 8.0 requirement.
+* Updated: Object cache drop-in now defines the WP 7.0 cache API surface, including reset and salted cache helpers.
 * Updated: Drop-in version bumped to 1.0.2; changed default cache directory resolution to use WP_CONTENT_DIR instead of ABSPATH.
+* Fixed: Activation/deactivation hooks and plugin action links now target the main plugin file.
+* Fixed: Persistent cache existence checks for add, replace, increment, decrement, delete, and add_multiple.
 * Removed: Obsolete sample test file (tests/test-sample.php).
 * Fixed: Minor logic and control flow refinements in object cache drop-in (e.g., readdir loop fix, file permissions).
 

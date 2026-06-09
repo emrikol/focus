@@ -3,7 +3,7 @@
  * Name: FOCUS Object Cache
  * Plugin URI: http://wordpress.org/plugins/focus-object-cache/
  * Description: File-based Object Cache is Utterly Slow: An Object Caching Dropin for WordPress that uses the local file system.
- * Version: 1.0.1
+ * Version: 1.0.2
  * Text Domain: focus-cache
  * Author: Derrick Tennant
  * Author URI: https://emrikol.com/
@@ -14,9 +14,13 @@
  * @package WordPress
  */
 
+declare(strict_types=1);
+
+// @codeCoverageIgnoreStart
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
+// @codeCoverageIgnoreEnd
 ?>
 
 <div class="wrap">
@@ -28,13 +32,20 @@ if ( ! defined( 'ABSPATH' ) ) {
 			<th><?php esc_html_e( 'Status:', 'focus-cache' ); ?></th>
 			<td><code><?php echo esc_html( $this->get_status() ); ?></code></td>
 		</tr>
+		<tr>
+			<th><?php esc_html_e( 'Backend:', 'focus-cache' ); ?></th>
+			<td>
+				<code><?php echo esc_html( $this->get_focus_backend() ); ?></code>
+				<p class="description" id="backend-description">The persistent backend can be changed by setting the <code>WP_FOCUS_BACKEND</code> constant to <code>file</code> or <code>database</code>.</p>
+			</td>
+		</tr>
 
 		<?php if ( ! is_null( $this->get_focus_cachekey_prefix() ) && trim( $this->get_focus_cachekey_prefix() ) !== '' ) : ?>
 			<tr>
 				<th><?php esc_html_e( 'Key Prefix:', 'focus-cache' ); ?></th>
 				<td>
 					<code><?php echo esc_html( $this->get_focus_cachekey_prefix() ); ?></code>
-					<p class="description" id="cachekey-prefix-description">The cache key prefix can be changed by setting the <code>WP_CACHE_KEY_SALT</code>code> constant.</p>
+						<p class="description" id="cachekey-prefix-description">The cache key prefix can be changed by setting the <code>WP_CACHE_KEY_SALT</code> constant.</p>
 				</td>
 			</tr>
 		<?php endif; ?>

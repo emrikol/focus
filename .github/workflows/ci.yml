@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  php-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - php: 8.0
+            wp: '7.0'
+            sniff: false
+          - php: 8.1
+            wp: '7.0'
+            sniff: false
+          - php: 8.2
+            wp: '7.0'
+            sniff: false
+          - php: 8.3
+            wp: '7.0'
+            sniff: false
+          - php: 8.4
+            wp: '7.0'
+            sniff: false
+
+    env:
+      WP_VERSION: ${{ matrix.wp }}
+      SNIFF: ${{ matrix.sniff }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y git unzip
+      - name: Setup PHP extensions
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: mbstring, intl, mysqli
+          coverage: none
+
+      - name: Cache composer
+        uses: actions/cache@v3
+        with:
+          path: ~/.composer/cache
+          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+
+      - name: Install dependencies
+        run: composer install --no-progress --prefer-dist
+
+      - name: Check object cache API parity
+        run: composer check:cache-api
+
+      - name: Prepare CodeSniffer (if sniff)
+        if: env.SNIFF == 'true'
+        run: |
+          PHPCS_DIR=/tmp/phpcs
+          SNIFFS_DIR=/tmp/sniffs
+          git clone --depth 1 https://github.com/squizlabs/PHP_CodeSniffer.git $PHPCS_DIR
+          git clone --depth 1 https://github.com/WordPress-Coding-Standards/WordPress-Coding-Standards.git $SNIFFS_DIR
+          git clone --depth 1 https://github.com/wimg/PHPCompatibility.git $SNIFFS_DIR/PHPCompatibility
+          $PHPCS_DIR/scripts/phpcs --config-set installed_paths $SNIFFS_DIR
+          phpenv rehash
+
+      - name: Syntax check
+        run: find . -name '*.php' -print0 | xargs -0 -n 1 -P 4 php -l
+
+      - name: Coding standards
+        if: env.SNIFF == 'true'
+        run: phpcs -p -s -v -n . --standard="WordPress-VIP" --extensions=php
+
+      - name: Run WordPress PHPUnit
+        run: bash run-tests.sh --php ${{ matrix.php }} --wp ${{ matrix.wp }} --all

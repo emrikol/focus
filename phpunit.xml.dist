@@ -17,7 +17,6 @@
 	<coverage>
 		<include>
 			<directory suffix=".php">./includes/</directory>
-			<file>./focus.php</file>
 		</include>
 		<exclude>
 			<directory>tests</directory>
