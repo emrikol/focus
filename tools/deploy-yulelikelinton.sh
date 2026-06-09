@@ -42,7 +42,7 @@ fi
 timestamp="$(date +%Y%m%d-%H%M%S)"
 backup_path="${BACKUP_ROOT}/focus-${timestamp}"
 
-ssh "${REMOTE}" "mkdir -p '${backup_path}' '${PLUGIN_PATH}' '${CONTENT_PATH}' && cp -a '${PLUGIN_PATH}' '${backup_path}/plugin' && cp -a '${CONTENT_PATH}/object-cache.php' '${backup_path}/object-cache.php'"
+ssh -n "${REMOTE}" "mkdir -p '${backup_path}' '${PLUGIN_PATH}' '${CONTENT_PATH}' && cp -a '${PLUGIN_PATH}' '${backup_path}/plugin' && cp -a '${CONTENT_PATH}/object-cache.php' '${backup_path}/object-cache.php'"
 
 rsync -az --delete --delete-excluded \
 	--exclude .git \
@@ -65,7 +65,7 @@ rsync -az --delete --delete-excluded \
 	--exclude DEVELOPMENT.md \
 	./ "${REMOTE}:${PLUGIN_PATH}/"
 
-ssh "${REMOTE}" "cp '${PLUGIN_PATH}/includes/object-cache.php' '${CONTENT_PATH}/object-cache.php'"
+ssh -n "${REMOTE}" "cp '${PLUGIN_PATH}/includes/object-cache.php' '${CONTENT_PATH}/object-cache.php'"
 
 ssh "${REMOTE}" "WP_CONFIG='${WP_CONFIG}' FOCUS_BACKEND='${BACKEND}' php" <<'PHP'
 <?php
@@ -109,7 +109,7 @@ if ( false === file_put_contents( $path, $contents ) ) {
 }
 PHP
 
-ssh "${REMOTE}" "php -l '${CONTENT_PATH}/object-cache.php' && php -l '${PLUGIN_PATH}/focus.php' && php -l '${PLUGIN_PATH}/includes/class-focus-cache.php'"
+ssh -n "${REMOTE}" "php -l '${CONTENT_PATH}/object-cache.php' && php -l '${PLUGIN_PATH}/focus.php' && php -l '${PLUGIN_PATH}/includes/class-focus-cache.php'"
 
 printf 'Deployed FOCUS to %s:%s\n' "${REMOTE}" "${SITE_PATH}"
 printf 'Backup: %s:%s\n' "${REMOTE}" "${backup_path}"
