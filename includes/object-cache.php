@@ -107,6 +107,13 @@ if ( ! defined( 'WP_FOCUS_DATABASE_PREFETCH_CHUNK_SIZE' ) ) {
 }
 
 /**
+ * Database backend schema version.
+ */
+if ( ! defined( 'WP_FOCUS_DATABASE_SCHEMA_VERSION' ) ) {
+	define( 'WP_FOCUS_DATABASE_SCHEMA_VERSION', '1' );
+}
+
+/**
  * Query Monitor slow object-cache operation threshold in seconds.
  */
 if ( ! defined( 'WP_FOCUS_QM_SLOW_OP_THRESHOLD' ) ) {
@@ -2892,20 +2899,20 @@ class WP_Object_Cache {
 		if ( $this->is_database_backend() ) {
 			global $wpdb;
 
-			$bucket = $this->get_database_bucket( $group, false );
-			if ( false === $bucket || ! isset( $wpdb ) || ! is_object( $wpdb ) ) {
+			if ( ! isset( $wpdb ) || ! is_object( $wpdb ) ) {
 				return 0;
 			}
 
+			$identity    = $this->get_database_bucket_identity( $group );
 			$items_table = $this->database_items_table;
+			$buckets     = $this->database_buckets_table;
 			$key_hash    = md5( (string) $key );
 
 			// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 			$expires_at = $wpdb->get_var(
 				$wpdb->prepare(
-					"SELECT expires_at FROM `{$items_table}` WHERE bucket_hash = UNHEX(%s) AND generation = %d AND key_hash = UNHEX(%s) LIMIT 1",
-					$bucket['bucket_hash'],
-					$bucket['generation'],
+					"SELECT i.expires_at FROM `{$items_table}` i INNER JOIN `{$buckets}` b ON b.bucket_hash = i.bucket_hash AND b.generation = i.generation WHERE i.bucket_hash = UNHEX(%s) AND i.key_hash = UNHEX(%s) LIMIT 1",
+					$identity['bucket_hash'],
 					$key_hash
 				)
 			);
@@ -3753,7 +3760,7 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 		}
 
 		$this->set_database_table_names();
-		$this->database_available      = WP_FOCUS_DATABASE_AUTO_INSTALL ? $this->install_database_tables() : $this->database_tables_exist();
+		$this->database_available      = WP_FOCUS_DATABASE_AUTO_INSTALL ? $this->database_schema_current() || $this->install_database_tables() : $this->database_tables_exist();
 		$this->database_schema_checked = true;
 
 		if ( $this->database_available ) {
@@ -3850,9 +3857,43 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 				PRIMARY KEY (meta_key)
 			) {$charset}"
 		);
+
+		$schema_result = $wpdb->query(
+			$wpdb->prepare(
+				"INSERT INTO `{$meta}` (meta_key, meta_value, updated_at)
+				VALUES (%s, %s, %d)
+				ON DUPLICATE KEY UPDATE meta_value = VALUES(meta_value), updated_at = VALUES(updated_at)",
+				'schema_version',
+				(string) WP_FOCUS_DATABASE_SCHEMA_VERSION,
+				time()
+			)
+		);
 		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
-		return false !== $bucket_result && false !== $item_result && false !== $meta_result && $this->database_tables_exist();
+		return false !== $bucket_result && false !== $item_result && false !== $meta_result && false !== $schema_result;
+	}
+
+	/**
+	 * Checks whether the installed database schema is current.
+	 *
+	 * @return bool Whether the installed schema version is current.
+	 */
+	protected function database_schema_current(): bool {
+		global $wpdb;
+
+		if ( ! isset( $wpdb ) || ! is_object( $wpdb ) || '' === $this->database_meta_table ) {
+			return false;
+		}
+
+		$meta = $this->database_meta_table;
+
+		$suppress_errors = $wpdb->suppress_errors( true );
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$version = $wpdb->get_var( $wpdb->prepare( "SELECT meta_value FROM `{$meta}` WHERE meta_key = %s LIMIT 1", 'schema_version' ) );
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$wpdb->suppress_errors( $suppress_errors );
+
+		return (string) WP_FOCUS_DATABASE_SCHEMA_VERSION === (string) $version;
 	}
 
 	/**
@@ -4089,25 +4130,26 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 	protected function load_from_database( string $key, string $group, bool &$found = false ): mixed {
 		global $wpdb;
 
-		$found  = false;
-		$bucket = $this->get_database_bucket( $group, false );
+		$found = false;
 
-		if ( false === $bucket ) {
+		if ( ! isset( $wpdb ) || ! is_object( $wpdb ) ) {
 			return false;
 		}
 
-		$table = $this->database_items_table;
+		$identity = $this->get_database_bucket_identity( $group );
+		$items    = $this->database_items_table;
+		$buckets  = $this->database_buckets_table;
 
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT cache_value, expires_at FROM `{$table}` WHERE bucket_hash = UNHEX(%s) AND generation = %d AND key_hash = UNHEX(%s) LIMIT 1", $bucket['bucket_hash'], $bucket['generation'], md5( $key ) ), ARRAY_A );
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT i.cache_value, i.expires_at, i.generation FROM `{$items}` i INNER JOIN `{$buckets}` b ON b.bucket_hash = i.bucket_hash AND b.generation = i.generation WHERE i.bucket_hash = UNHEX(%s) AND i.key_hash = UNHEX(%s) AND i.expires_at > %d LIMIT 1", $identity['bucket_hash'], md5( $key ), time() ), ARRAY_A );
 		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
-		if ( ! is_array( $row ) || (int) $row['expires_at'] <= time() ) {
-			if ( is_array( $row ) ) {
-				$this->delete_from_database( $key, $group );
-			}
+		if ( ! is_array( $row ) ) {
 			return false;
 		}
+
+		$bucket_cache_key                            = implode( ':', array( $identity['bucket_hash'], $identity['scope_type'], $identity['network_id'], $identity['blog_id'], $identity['cache_group'] ) );
+		$this->database_buckets[ $bucket_cache_key ] = array_merge( $identity, array( 'generation' => (int) $row['generation'] ) );
 
 		$value = $this->unserialize_database_value( (string) $row['cache_value'], $key, $group );
 		if ( ! $value['found'] ) {
@@ -4134,13 +4176,13 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 	protected function load_multiple_from_database( array $keys, string $group ): array {
 		global $wpdb;
 
-		$bucket = $this->get_database_bucket( $group, false );
-		if ( false === $bucket || empty( $keys ) ) {
+		if ( empty( $keys ) || ! isset( $wpdb ) || ! is_object( $wpdb ) ) {
 			return array();
 		}
 
-		$hashes = array();
-		$lookup = array();
+		$identity = $this->get_database_bucket_identity( $group );
+		$hashes   = array();
+		$lookup   = array();
 		foreach ( $keys as $original_key => $cache_key ) {
 			$hash            = md5( (string) $cache_key );
 			$hashes[]        = $hash;
@@ -4149,15 +4191,21 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 
 		$hashes       = array_values( array_unique( $hashes ) );
 		$placeholders = implode( ', ', array_fill( 0, count( $hashes ), 'UNHEX(%s)' ) );
-		$table        = $this->database_items_table;
-		$values       = array_merge( array( $bucket['bucket_hash'], $bucket['generation'] ), $hashes, array( time() ) );
+		$items        = $this->database_items_table;
+		$buckets      = $this->database_buckets_table;
+		$values       = array_merge( array( $identity['bucket_hash'] ), $hashes, array( time() ) );
 
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
-		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT HEX(key_hash) AS key_hash, cache_key, cache_value, expires_at FROM `{$table}` WHERE bucket_hash = UNHEX(%s) AND generation = %d AND key_hash IN ({$placeholders}) AND expires_at > %d", $values ), ARRAY_A );
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT HEX(i.key_hash) AS key_hash, i.cache_key, i.cache_value, i.expires_at, i.generation FROM `{$items}` i INNER JOIN `{$buckets}` b ON b.bucket_hash = i.bucket_hash AND b.generation = i.generation WHERE i.bucket_hash = UNHEX(%s) AND i.key_hash IN ({$placeholders}) AND i.expires_at > %d", $values ), ARRAY_A );
 		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
 
 		if ( ! is_array( $rows ) ) {
 			return array();
+		}
+
+		if ( ! empty( $rows ) ) {
+			$bucket_cache_key                            = implode( ':', array( $identity['bucket_hash'], $identity['scope_type'], $identity['network_id'], $identity['blog_id'], $identity['cache_group'] ) );
+			$this->database_buckets[ $bucket_cache_key ] = array_merge( $identity, array( 'generation' => (int) $rows[0]['generation'] ) );
 		}
 
 		$found = array();
@@ -4307,15 +4355,16 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 
 			$this->record_prefetch_requested_keys( $group, $keys );
 
-			$bucket = $this->get_database_bucket( $group, false );
-			if ( false === $bucket ) {
+			if ( ! $this->should_persist( $group ) ) {
 				continue;
 			}
+
+			$bucket = $this->get_database_bucket_identity( $group );
 
 			foreach ( $keys as $key ) {
 				$cache_key  = $this->key( $key, $group );
 				$key_hash   = md5( $cache_key );
-				$lookup_key = $bucket['bucket_hash'] . ':' . $bucket['generation'] . ':' . $key_hash;
+				$lookup_key = $bucket['bucket_hash'] . ':' . $key_hash;
 
 				$requests[ $lookup_key ] = array(
 					'group'     => $group,
@@ -4349,13 +4398,13 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 		$values    = array();
 		$by_bucket = array();
 		$table     = $this->database_items_table;
+		$buckets   = $this->database_buckets_table;
 
 		foreach ( $requests as $request ) {
-			$bucket_key = $request['bucket']['bucket_hash'] . ':' . $request['bucket']['generation'];
+			$bucket_key = $request['bucket']['bucket_hash'];
 			if ( ! isset( $by_bucket[ $bucket_key ] ) ) {
 				$by_bucket[ $bucket_key ] = array(
 					'bucket_hash' => $request['bucket']['bucket_hash'],
-					'generation'  => $request['bucket']['generation'],
 					'key_hashes'  => array(),
 				);
 			}
@@ -4367,8 +4416,8 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 			$key_hashes   = array_values( array_unique( $bucket['key_hashes'] ) );
 			$placeholders = implode( ', ', array_fill( 0, count( $key_hashes ), 'UNHEX(%s)' ) );
 
-			$clauses[] = "(bucket_hash = UNHEX(%s) AND generation = %d AND key_hash IN ({$placeholders}))";
-			$values    = array_merge( $values, array( $bucket['bucket_hash'], $bucket['generation'] ), $key_hashes );
+			$clauses[] = "(i.bucket_hash = UNHEX(%s) AND i.key_hash IN ({$placeholders}))";
+			$values    = array_merge( $values, array( $bucket['bucket_hash'] ), $key_hashes );
 		}
 
 		if ( empty( $clauses ) ) {
@@ -4385,7 +4434,7 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT HEX(bucket_hash) AS bucket_hash, generation, HEX(key_hash) AS key_hash, cache_key, cache_value, expires_at FROM `{$table}` WHERE ({$where}) AND expires_at > %d",
+				"SELECT HEX(i.bucket_hash) AS bucket_hash, i.generation, HEX(i.key_hash) AS key_hash, i.cache_key, i.cache_value, i.expires_at FROM `{$table}` i INNER JOIN `{$buckets}` b ON b.bucket_hash = i.bucket_hash AND b.generation = i.generation WHERE ({$where}) AND i.expires_at > %d",
 				$values
 			),
 			ARRAY_A
@@ -4403,13 +4452,16 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 		$now           = time();
 
 		foreach ( $rows as $row ) {
-			$lookup_key = strtolower( (string) $row['bucket_hash'] ) . ':' . (int) $row['generation'] . ':' . strtolower( (string) $row['key_hash'] );
+			$lookup_key = strtolower( (string) $row['bucket_hash'] ) . ':' . strtolower( (string) $row['key_hash'] );
 			if ( ! isset( $requests[ $lookup_key ] ) ) {
 				continue;
 			}
 
-			$request = $requests[ $lookup_key ];
-			$value   = $this->unserialize_database_value( (string) $row['cache_value'], (string) $row['cache_key'], $request['group'] );
+			$request                                     = $requests[ $lookup_key ];
+			$bucket_cache_key                            = implode( ':', array( $request['bucket']['bucket_hash'], $request['bucket']['scope_type'], $request['bucket']['network_id'], $request['bucket']['blog_id'], $request['bucket']['cache_group'] ) );
+			$this->database_buckets[ $bucket_cache_key ] = array_merge( $request['bucket'], array( 'generation' => (int) $row['generation'] ) );
+
+			$value = $this->unserialize_database_value( (string) $row['cache_value'], (string) $row['cache_key'], $request['group'] );
 			if ( ! $value['found'] ) {
 				continue;
 			}

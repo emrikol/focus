@@ -142,6 +142,7 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 		$this->assertNotEmpty( $wpdb->get_results( "DESCRIBE `{$cache->database_buckets_table}`" ) );
 		$this->assertNotEmpty( $wpdb->get_results( "DESCRIBE `{$cache->database_items_table}`" ) );
 		$this->assertNotEmpty( $wpdb->get_results( "DESCRIBE `{$cache->database_meta_table}`" ) );
+		$this->assertSame( (string) WP_FOCUS_DATABASE_SCHEMA_VERSION, (string) $wpdb->get_var( "SELECT meta_value FROM `{$cache->database_meta_table}` WHERE meta_key = 'schema_version' LIMIT 1" ) );
 	}
 
 	public function test_database_backend_get_set_false_value_delete_and_expiration() {
@@ -323,6 +324,34 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 		} finally {
 			$wpdb->suppress_errors( $suppress_errors );
 			$cache->configure_backend( 'database' );
+		}
+	}
+
+	public function test_database_backend_schema_and_storage_defensive_branches() {
+		global $wpdb;
+
+		$cache = $this->init_database_cache();
+
+		$schema_current = $this->get_protected_method( $cache, 'database_schema_current' );
+		$tables_exist = $this->get_protected_method( $cache, 'database_tables_exist' );
+		$get_expiration = $this->get_protected_method( $cache, 'get_expiration' );
+		$load_from_database = $this->get_protected_method( $cache, 'load_from_database' );
+
+		$this->assertTrue( $schema_current->invoke( $cache ) );
+		$this->assertTrue( $tables_exist->invoke( $cache ) );
+
+		$original_wpdb = $wpdb;
+		try {
+			$wpdb = null; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+
+			$this->assertFalse( $schema_current->invoke( $cache ) );
+			$this->assertSame( 0, $get_expiration->invoke( $cache, 'missing', 'database_no_wpdb' ) );
+
+			$found = true;
+			$this->assertFalse( $load_from_database->invokeArgs( $cache, array( 'missing', 'database_no_wpdb', &$found ) ) );
+			$this->assertFalse( $found );
+		} finally {
+			$wpdb = $original_wpdb; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 		}
 	}
 
