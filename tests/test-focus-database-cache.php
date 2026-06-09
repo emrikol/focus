@@ -70,6 +70,52 @@ class Tests_Focus_Database_Query_Failure_Wpdb_Double {
 	}
 }
 
+class Tests_Focus_Database_Invalid_Prefetch_Rows_Wpdb_Double {
+	public function prepare( string $query, mixed ...$args ): string {
+		unset( $args );
+		return $query;
+	}
+
+	public function get_results( string $query, string $output = OBJECT ): array {
+		unset( $query, $output );
+
+		return array(
+			array(
+				'cache_group' => '',
+				'cache_key' => 'skipped_group',
+				'bucket_hash' => strtoupper( md5( 'skipped_bucket' ) ),
+				'key_hash' => strtoupper( md5( 'skipped_key' ) ),
+				'cache_value' => null,
+				'expires_at' => null,
+			),
+			array(
+				'cache_group' => 'database_prefetch_invalid_rows',
+				'cache_key' => " \n\t",
+				'bucket_hash' => strtoupper( md5( 'skipped_bucket' ) ),
+				'key_hash' => strtoupper( md5( 'skipped_key' ) ),
+				'cache_value' => null,
+				'expires_at' => null,
+			),
+			array(
+				'cache_group' => 'database_prefetch_invalid_rows',
+				'cache_key' => 'skipped_hashes',
+				'bucket_hash' => '',
+				'key_hash' => '',
+				'cache_value' => null,
+				'expires_at' => null,
+			),
+			array(
+				'cache_group' => 'database_prefetch_invalid_rows',
+				'cache_key' => 'valid_missing',
+				'bucket_hash' => strtoupper( md5( 'valid_bucket' ) ),
+				'key_hash' => strtoupper( md5( 'valid_key' ) ),
+				'cache_value' => null,
+				'expires_at' => null,
+			),
+		);
+	}
+}
+
 class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 	private ?FOCUS_Database_Object_Cache $database_cache = null;
 
@@ -168,8 +214,10 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 		$this->assertSame( 'database', $cache->backend );
 		$this->assertTrue( $cache->database_schema_checked );
 		$this->assertSame( $wpdb->base_prefix . 'focus_cache_items', $cache->database_items_table );
+		$this->assertSame( $wpdb->base_prefix . 'focus_cache_prefetch_keys', $cache->database_prefetch_table );
 
 		$this->assertNotEmpty( $wpdb->get_results( "DESCRIBE `{$cache->database_items_table}`" ) );
+		$this->assertNotEmpty( $wpdb->get_results( "DESCRIBE `{$cache->database_prefetch_table}`" ) );
 		$this->assertNull( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $cache->database_buckets_table ) ) );
 		$this->assertNull( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $cache->database_meta_table ) ) );
 	}
@@ -354,6 +402,8 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 		$this->assertFalse( $this->get_protected_method( $cache, 'flush_database' )->invoke( $cache ) );
 		$this->assertTrue( $this->get_protected_method( $cache, 'flush_database_group' )->invoke( $cache, 'database_unavailable' ) );
 		$this->assertFalse( $this->get_protected_method( $cache, 'save_to_database' )->invoke( $cache, 'key', 'value', 'database_unavailable', 300 ) );
+		$this->assertFalse( $this->get_protected_method( $cache, 'save_prefetch_groups_to_database' )->invoke( $cache, md5( 'database_unavailable' ), array( 'database_unavailable' => array( 'key' ) ) ) );
+		$this->assertFalse( $this->get_protected_method( $cache, 'load_prefetch_request_from_database' )->invoke( $cache, md5( 'database_unavailable' ) ) );
 		$this->assertFalse( $this->get_protected_method( $cache, 'delete_from_database' )->invoke( $cache, 'key', 'database_unavailable' ) );
 		$cache->database_available = true;
 	}
@@ -475,10 +525,12 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 		$cache = $this->init_database_cache();
 		$save_multiple = $this->get_protected_method( $cache, 'save_multiple_to_database' );
 		$delete_multiple = $this->get_protected_method( $cache, 'delete_multiple_from_database' );
+		$save_prefetch = $this->get_protected_method( $cache, 'save_prefetch_groups_to_database' );
 
 		$this->assertSame( array(), $save_multiple->invoke( $cache, array(), 'database_batch_defensive', 300 ) );
 		$this->assertSame( array(), $delete_multiple->invoke( $cache, array(), 'database_batch_defensive' ) );
 		$this->assertSame( array( 'missing' => false ), $delete_multiple->invoke( $cache, array( 'missing' => 'missing' ), 'database_batch_defensive' ) );
+		$this->assertFalse( $save_prefetch->invoke( $cache, md5( 'empty-prefetch' ), array() ) );
 
 		$original_wpdb = $wpdb;
 		try {
@@ -500,6 +552,7 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 					300
 				)
 			);
+			$this->assertFalse( $save_prefetch->invoke( $cache, md5( 'query-failure' ), array( 'database_batch_defensive' => array( 'key' ) ) ) );
 			$this->assertSame( array( 'missing' => false ), $delete_multiple->invoke( $cache, array( 'missing' => 'missing' ), 'database_batch_defensive' ) );
 		} finally {
 			$wpdb = $original_wpdb; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
@@ -523,28 +576,14 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 		$group = 'database_non_array_results';
 
 		$load_multiple = $this->get_protected_method( $cache, 'load_multiple_from_database' );
-		$chunk_method = $this->get_protected_method( $cache, 'load_prefetch_request_chunk_from_database' );
-		$bucket = $this->get_database_bucket_identity( $cache, $group );
-		$cache_key = $cache->key( 'missing', $group );
-		$key_hash = md5( $cache_key );
+		$load_prefetch = $this->get_protected_method( $cache, 'load_prefetch_request_from_database' );
 
 		$original_wpdb = $wpdb;
 		try {
 			$wpdb = new Tests_Focus_Database_Non_Array_Results_Wpdb_Double(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 
 			$this->assertSame( array(), $load_multiple->invoke( $cache, array( 'missing' => $cache->key( 'missing', $group ) ), $group ) );
-			$chunk_method->invoke(
-				$cache,
-				array(
-					$bucket['bucket_hash'] . ':' . $key_hash => array(
-						'group' => $group,
-						'raw_key' => 'missing',
-						'cache_key' => $cache_key,
-						'key_hash' => $key_hash,
-						'bucket' => $bucket,
-					),
-				)
-			);
+			$this->assertFalse( $load_prefetch->invoke( $cache, md5( 'non-array-results' ) ) );
 		} finally {
 			$wpdb = $original_wpdb; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 		}
@@ -557,28 +596,14 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 		$group = 'database_mismatched_results';
 
 		$load_multiple = $this->get_protected_method( $cache, 'load_multiple_from_database' );
-		$chunk_method = $this->get_protected_method( $cache, 'load_prefetch_request_chunk_from_database' );
-		$bucket = $this->get_database_bucket_identity( $cache, $group );
-		$cache_key = $cache->key( 'missing', $group );
-		$key_hash = md5( $cache_key );
+		$load_prefetch = $this->get_protected_method( $cache, 'load_prefetch_request_from_database' );
 
 		$original_wpdb = $wpdb;
 		try {
 			$wpdb = new Tests_Focus_Database_Mismatched_Results_Wpdb_Double(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 
 			$this->assertSame( array(), $load_multiple->invoke( $cache, array( 'missing' => $cache->key( 'missing', $group ) ), $group ) );
-			$chunk_method->invoke(
-				$cache,
-				array(
-					$bucket['bucket_hash'] . ':' . $key_hash => array(
-						'group' => $group,
-						'raw_key' => 'missing',
-						'cache_key' => $cache_key,
-						'key_hash' => $key_hash,
-						'bucket' => $bucket,
-					),
-				)
-			);
+			$this->assertFalse( $load_prefetch->invoke( $cache, md5( 'mismatched-results' ) ) );
 
 			$this->assertArrayNotHasKey( 'missing', $cache->cache[ $group ] ?? array() );
 		} finally {
@@ -636,6 +661,8 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 	}
 
 	public function test_database_backend_prefetch_hydrates_multiple_groups() {
+		global $wpdb;
+
 		$cache = $this->init_database_cache();
 		$cache->test_prefetch_enabled = true;
 		$_SERVER['HTTP_HOST'] = 'example.com';
@@ -647,12 +674,19 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 
 		$cache->set( 'key_1', 'value_1', $group_1 );
 		$cache->set( 'key_2', 'value_2', $group_2 );
+
+		$query_count = $wpdb->num_queries;
 		$cache->save_prefetch_manifest();
+		$this->assertSame( 1, $wpdb->num_queries - $query_count );
+		$this->assertSame( 2, (int) $wpdb->get_var( "SELECT COUNT(*) FROM `{$cache->database_prefetch_table}`" ) );
 
 		$fresh_cache = new FOCUS_Database_Object_Cache();
 		$fresh_cache->configure_backend( 'database' );
 		$fresh_cache->test_prefetch_enabled = true;
+
+		$query_count = $wpdb->num_queries;
 		$fresh_cache->load_prefetch_manifest();
+		$this->assertSame( 1, $wpdb->num_queries - $query_count );
 
 		$this->assertSame( 'value_1', $fresh_cache->cache[ $group_1 ][ $fresh_cache->key( 'key_1', $group_1 ) ] );
 		$this->assertSame( 'value_2', $fresh_cache->cache[ $group_2 ][ $fresh_cache->key( 'key_2', $group_2 ) ] );
@@ -696,20 +730,93 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 		$this->database_cache = $fresh_cache;
 	}
 
+	public function test_database_backend_prefetch_records_misses_as_request_local_negative_cache() {
+		global $wpdb;
+
+		$cache = $this->init_database_cache();
+		$cache->test_prefetch_enabled = true;
+		$_SERVER['HTTP_HOST'] = 'example.com';
+		$_SERVER['REQUEST_URI'] = '/database-prefetch-misses';
+		unset( $_SERVER['HTTPS'], $_SERVER['QUERY_STRING'] );
+
+		$group = 'database_prefetch_misses';
+		$cache->set( 'hit', 'hit_value', $group );
+
+		$prefetch_key = $cache->get_prefetch_key();
+		$this->assertIsString( $prefetch_key );
+
+		$save_groups = $this->get_protected_method( $cache, 'save_prefetch_groups_to_database' );
+		$this->assertTrue( $save_groups->invoke( $cache, $prefetch_key, array( $group => array( 'hit', 'missing' ) ) ) );
+
+		$fresh_cache = new FOCUS_Database_Object_Cache();
+		$fresh_cache->configure_backend( 'database' );
+		$fresh_cache->test_prefetch_enabled = true;
+
+		$query_count = $wpdb->num_queries;
+		$fresh_cache->load_prefetch_manifest();
+		$this->assertSame( 1, $wpdb->num_queries - $query_count );
+
+		$hit_key = $fresh_cache->key( 'hit', $group );
+		$missing_key = $fresh_cache->key( 'missing', $group );
+
+		$this->assertSame( 'hit_value', $fresh_cache->cache[ $group ][ $hit_key ] );
+		$this->assertArrayHasKey( $group, $fresh_cache->database_misses );
+		$this->assertArrayHasKey( $missing_key, $fresh_cache->database_misses[ $group ] );
+
+		$found = true;
+		$query_count = $wpdb->num_queries;
+		$this->assertFalse( $fresh_cache->get( 'missing', $group, false, $found ) );
+		$this->assertFalse( $found );
+		$this->assertSame( 0, $wpdb->num_queries - $query_count );
+
+		$query_count = $wpdb->num_queries;
+		$this->assertSame( array( 'missing' => false ), $fresh_cache->get_multiple( array( 'missing' ), $group ) );
+		$this->assertSame( 0, $wpdb->num_queries - $query_count );
+
+		$object_cache_stats = $fresh_cache->get_stats();
+		$this->assertSame( '1 hits, 1 misses', $object_cache_stats['operations']['get_multiple'][0]['result'] );
+		$this->assertSame( 'prefetch_miss', $object_cache_stats['operations']['get_local'][0]['result'] );
+
+		$prefetch_stats = $fresh_cache->get_prefetch_stats();
+		$this->assertSame( 2, $prefetch_stats['requested_keys'] );
+		$this->assertSame( 2, $prefetch_stats['loaded_keys'] );
+		$this->assertSame( 0, $prefetch_stats['missing_keys'] );
+		$this->assertSame( 1, $prefetch_stats['used_keys'] );
+		$this->assertSame( 1, $prefetch_stats['unused_keys'] );
+		$this->assertSame( 1, $prefetch_stats['calls_saved'] );
+
+		$query_count = $wpdb->num_queries;
+		$fresh_cache->save_prefetch_manifest();
+		$this->assertSame( 1, $wpdb->num_queries - $query_count );
+
+		$this->database_cache = $fresh_cache;
+	}
+
 	public function test_database_backend_prefetch_ignores_disabled_missing_and_false_key_manifests() {
+		global $wpdb;
+
 		$cache = $this->init_database_cache();
 
 		$cache->load_prefetch_manifest();
+		$query_count = $wpdb->num_queries;
+		$cache->save_prefetch_manifest();
+		$this->assertSame( 0, $wpdb->num_queries - $query_count );
 
 		$cache->test_prefetch_enabled = true;
 		$_SERVER['HTTP_HOST'] = 'example.com';
 		$_SERVER['REQUEST_URI'] = '/database-prefetch-missing';
 		unset( $_SERVER['HTTPS'], $_SERVER['QUERY_STRING'] );
 		$cache->load_prefetch_manifest();
+		$query_count = $wpdb->num_queries;
+		$cache->save_prefetch_manifest();
+		$this->assertSame( 0, $wpdb->num_queries - $query_count );
 
 		$false_key_cache = new Tests_Focus_Database_False_Prefetch_Key_Cache();
 		$false_key_cache->configure_backend( 'database' );
 		$false_key_cache->load_prefetch_manifest();
+		$query_count = $wpdb->num_queries;
+		$false_key_cache->save_prefetch_manifest();
+		$this->assertSame( 0, $wpdb->num_queries - $query_count );
 
 		$this->assertTrue( $cache->is_database_backend() );
 		$this->assertTrue( $false_key_cache->is_database_backend() );
@@ -721,50 +828,67 @@ class Tests_Focus_Database_Cache extends WP_UnitTestCase {
 		global $wpdb;
 
 		$cache = $this->init_database_cache();
-		$groups_method = $this->get_protected_method( $cache, 'load_prefetch_groups_from_database' );
-		$chunk_method = $this->get_protected_method( $cache, 'load_prefetch_request_chunk_from_database' );
+		$save_groups = $this->get_protected_method( $cache, 'save_prefetch_groups_to_database' );
+		$load_request = $this->get_protected_method( $cache, 'load_prefetch_request_from_database' );
+		$merge_groups = $this->get_protected_method( $cache, 'merge_database_miss_prefetch_groups' );
+		$prefetch_key = md5( 'database_prefetch_skips' );
 
 		$cache->add_non_persistent_groups( array( 'database_prefetch_nonpersistent' ) );
-		$groups_method->invoke(
-			$cache,
-			array(
-				$cache->prefetch_group => array( 'skip_prefetch_group' ),
-				123 => array( 'skip_non_string_group' ),
-				'database_prefetch_empty' => array(),
-				'database_prefetch_bad_keys' => array( '', " \n\t", null ),
-				'database_prefetch_nonpersistent' => array( 'skip_bucket' ),
+		$this->assertFalse(
+			$save_groups->invoke(
+				$cache,
+				$prefetch_key,
+				array(
+					$cache->prefetch_group => array( 'skip_prefetch_group' ),
+					123 => array( 'skip_non_string_group' ),
+					'database_prefetch_empty' => array(),
+					'database_prefetch_bad_keys' => array( '', " \n\t", null ),
+					'database_prefetch_nonpersistent' => array( 'skip_bucket' ),
+				)
 			)
 		);
 
-		$chunk_method->invoke( $cache, array() );
+		$cache->database_misses = array(
+			123 => array( 'skip_non_string_group' => true ),
+			$cache->prefetch_group => array( 'skip_prefetch_group' => true ),
+			'database_prefetch_nonpersistent' => array( 'skip_nonpersistent' => true ),
+			'database_prefetch_empty_misses' => array(),
+		);
+		$this->assertSame( array(), $merge_groups->invoke( $cache, array() ) );
+		$cache->database_misses = array();
+
+		$this->assertFalse( $load_request->invoke( $cache, md5( 'database_prefetch_missing_rows' ) ) );
 
 		$group = 'database_prefetch_corrupt';
 		$cache_key = $this->insert_raw_database_item( $cache, $group, 'corrupt_prefetch_key', '' );
-		$groups_method->invoke( $cache, array( $group => array( 'corrupt_prefetch_key' ) ) );
+		$this->assertTrue(
+			$save_groups->invoke(
+				$cache,
+				$prefetch_key,
+				array( $group => array( 'corrupt_prefetch_key' ) )
+			)
+		);
+		$this->assertTrue( $load_request->invoke( $cache, $prefetch_key ) );
 
 		$this->assertArrayNotHasKey( $cache_key, $cache->cache[ $group ] ?? array() );
+		$this->assertArrayHasKey( $cache_key, $cache->database_misses[ $group ] );
 
 		$suppress_errors = $wpdb->suppress_errors( true );
 		try {
-			$bucket = $this->get_database_bucket_identity( $cache, $group );
-			$missing_cache_key = $cache->key( 'missing', $group );
-			$missing_key_hash = md5( $missing_cache_key );
-
-			$cache->database_items_table = $wpdb->base_prefix . 'focus_cache_missing_items';
-			$chunk_method->invoke(
-				$cache,
-				array(
-					$bucket['bucket_hash'] . ':' . $missing_key_hash => array(
-						'group' => $group,
-						'cache_key' => $missing_cache_key,
-						'key_hash' => $missing_key_hash,
-						'bucket' => $bucket,
-					),
-				)
-			);
+			$cache->database_prefetch_table = $wpdb->base_prefix . 'focus_cache_missing_prefetch';
+			$this->assertFalse( $load_request->invoke( $cache, $prefetch_key ) );
 		} finally {
 			$wpdb->suppress_errors( $suppress_errors );
 			$cache->configure_backend( 'database' );
+		}
+
+		$original_wpdb = $wpdb;
+		try {
+			$wpdb = new Tests_Focus_Database_Invalid_Prefetch_Rows_Wpdb_Double(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+			$this->assertTrue( $load_request->invoke( $cache, md5( 'database_prefetch_invalid_rows' ) ) );
+			$this->assertArrayHasKey( 'valid_missing', $cache->database_misses['database_prefetch_invalid_rows'] );
+		} finally {
+			$wpdb = $original_wpdb; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
 		}
 	}
 

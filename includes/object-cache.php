@@ -848,6 +848,18 @@ class WP_Object_Cache {
 	public array $prefetch_requested_keys = array();
 
 	/**
+	 * Runtime database misses learned while prefetching, keyed by group and normalized cache key.
+	 *
+	 * These misses are request-local and only populated by database prefetch, so normal cache misses
+	 * do not create persistent negative-cache state.
+	 *
+	 * @since 1.1.0
+	 * @access public
+	 * @var array
+	 */
+	public array $database_misses = array();
+
+	/**
 	 * Query Monitor-compatible prefetch statistics.
 	 *
 	 * @since 1.1.0
@@ -1076,6 +1088,15 @@ class WP_Object_Cache {
 	 * @var string
 	 */
 	public string $database_items_table = '';
+
+	/**
+	 * Database prefetch key table name.
+	 *
+	 * @since 1.1.0
+	 * @access private
+	 * @var string
+	 */
+	public string $database_prefetch_table = '';
 
 	/**
 	 * Previous database metadata table name removed by the installer.
@@ -1562,7 +1583,8 @@ class WP_Object_Cache {
 	 * @return bool Always returns true.
 	 */
 	public function flush_runtime() {
-		$this->cache = array();
+		$this->cache           = array();
+		$this->database_misses = array();
 		return true;
 	}
 
@@ -1625,6 +1647,20 @@ class WP_Object_Cache {
 		}
 
 		if ( $this->is_database_backend() ) {
+			if ( ! $force && $this->has_database_miss( $key, $group ) ) {
+				if ( $stat ) {
+					$this->group_ops[ $group ][] = 'Miss (Prefetch): ' . $key;
+					++$this->cache_misses;
+				}
+
+				$found = false;
+				$this->record_prefetch_used_key( $group, $key );
+				if ( $stat ) {
+					$this->record_qm_operation( 'get_local', $key, $group, null, $start, 'prefetch_miss' );
+				}
+				return false;
+			}
+
 			$db_found = false;
 			$db_value = $this->load_from_database( $key, $group, $db_found );
 
@@ -2508,6 +2544,10 @@ class WP_Object_Cache {
 				$results[ $key ] = $this->cache[ $group ][ $cache_key ];
 				$this->record_prefetch_used_key( $group, $cache_key );
 				++$cache_hits;
+			} elseif ( ! $force && $this->is_database_backend() && $this->has_database_miss( $cache_key, $group ) ) {
+				$results[ $key ] = false;
+				$this->record_prefetch_used_key( $group, $cache_key );
+				++$cache_misses;
 			} else {
 				$missing_keys[ $key ] = $cache_key;
 			}
@@ -2899,6 +2939,66 @@ class WP_Object_Cache {
 	 */
 	protected function isset_internal( int|string $key, string $group ): bool {
 		return isset( $this->cache[ $group ] ) && ( isset( $this->cache[ $group ][ $key ] ) || array_key_exists( $key, $this->cache[ $group ] ) );
+	}
+
+	/**
+	 * Determines whether database prefetch learned that a key is missing.
+	 *
+	 * @since 1.1.0
+	 *
+	 * @param int|string $key   Normalized cache key.
+	 * @param string     $group Cache group.
+	 * @return bool Whether the key is known missing for this request.
+	 */
+	protected function has_database_miss( int|string $key, string $group ): bool {
+		return isset( $this->database_misses[ $group ][ $key ] );
+	}
+
+	/**
+	 * Records a request-local database miss learned during prefetch.
+	 *
+	 * @since 1.1.0
+	 *
+	 * @param int|string $key   Normalized cache key.
+	 * @param string     $group Cache group.
+	 * @return void
+	 */
+	protected function mark_database_miss( int|string $key, string $group ): void {
+		$this->database_misses[ $group ][ $key ] = true;
+	}
+
+	/**
+	 * Clears a request-local database miss.
+	 *
+	 * @since 1.1.0
+	 *
+	 * @param int|string $key   Normalized cache key.
+	 * @param string     $group Cache group.
+	 * @return void
+	 */
+	protected function clear_database_miss( int|string $key, string $group ): void {
+		unset( $this->database_misses[ $group ][ $key ] );
+
+		if ( empty( $this->database_misses[ $group ] ) ) {
+			unset( $this->database_misses[ $group ] );
+		}
+	}
+
+	/**
+	 * Clears request-local database misses.
+	 *
+	 * @since 1.1.0
+	 *
+	 * @param string|null $group Optional cache group to clear.
+	 * @return void
+	 */
+	protected function clear_database_misses( ?string $group = null ): void {
+		if ( null === $group ) {
+			$this->database_misses = array();
+			return;
+		}
+
+		unset( $this->database_misses[ $group ] );
 	}
 
 	/**
@@ -3767,7 +3867,7 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 		}
 
 		$this->set_database_table_names();
-		$this->database_available = '' !== $this->database_items_table;
+		$this->database_available = '' !== $this->database_items_table && '' !== $this->database_prefetch_table;
 
 		if ( $this->database_available ) {
 			$this->backend = 'database';
@@ -3795,9 +3895,10 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 			return;
 		}
 
-		$this->database_buckets_table = $wpdb->base_prefix . 'focus_cache_buckets';
-		$this->database_items_table   = $wpdb->base_prefix . 'focus_cache_items';
-		$this->database_meta_table    = $wpdb->base_prefix . 'focus_cache_meta';
+		$this->database_buckets_table  = $wpdb->base_prefix . 'focus_cache_buckets';
+		$this->database_items_table    = $wpdb->base_prefix . 'focus_cache_items';
+		$this->database_meta_table     = $wpdb->base_prefix . 'focus_cache_meta';
+		$this->database_prefetch_table = $wpdb->base_prefix . 'focus_cache_prefetch_keys';
 	}
 
 	/**
@@ -3810,7 +3911,7 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 
 		$this->set_database_table_names();
 
-		if ( ! isset( $wpdb ) || ! is_object( $wpdb ) || '' === $this->database_items_table ) {
+		if ( ! isset( $wpdb ) || ! is_object( $wpdb ) || '' === $this->database_items_table || '' === $this->database_prefetch_table ) {
 			return false;
 		}
 
@@ -3818,9 +3919,10 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 		$old_buckets = $this->database_buckets_table;
 		$items       = $this->database_items_table;
 		$old_meta    = $this->database_meta_table;
+		$prefetch    = $this->database_prefetch_table;
 
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$drop_result = $wpdb->query( "DROP TABLE IF EXISTS `{$old_buckets}`, `{$items}`, `{$old_meta}`" );
+		$drop_result = $wpdb->query( "DROP TABLE IF EXISTS `{$old_buckets}`, `{$items}`, `{$old_meta}`, `{$prefetch}`" );
 
 		$item_result = $wpdb->query(
 			"CREATE TABLE `{$items}` (
@@ -3837,9 +3939,24 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 				KEY expires_at (expires_at)
 			) {$charset}"
 		);
+
+		$prefetch_result = $wpdb->query(
+			"CREATE TABLE `{$prefetch}` (
+				request_hash binary(16) NOT NULL,
+				bucket_hash binary(16) NOT NULL,
+				key_hash binary(16) NOT NULL,
+				cache_group varchar(191) NOT NULL,
+				cache_key longtext NOT NULL,
+				expires_at bigint unsigned NOT NULL,
+				created_at bigint unsigned NOT NULL,
+				updated_at bigint unsigned NOT NULL,
+				PRIMARY KEY (request_hash, bucket_hash, key_hash),
+				KEY expires_at (expires_at)
+			) {$charset}"
+		);
 		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.DirectDatabaseQuery.SchemaChange, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
-		$result = false !== $drop_result && false !== $item_result;
+		$result = false !== $drop_result && false !== $item_result && false !== $prefetch_result;
 
 		$this->database_schema_checked = true;
 
@@ -3862,14 +3979,15 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 	public function run_database_gc( int $limit = 0 ): int {
 		global $wpdb;
 
-		if ( ! $this->database_available || ! isset( $wpdb ) || ! is_object( $wpdb ) || '' === $this->database_items_table ) {
+		if ( ! $this->database_available || ! isset( $wpdb ) || ! is_object( $wpdb ) || '' === $this->database_items_table || '' === $this->database_prefetch_table ) {
 			return 0;
 		}
 
-		$limit   = $limit > 0 ? $limit : $this->database_gc_batch_size;
-		$items   = $this->database_items_table;
-		$now     = time();
-		$deleted = 0;
+		$limit    = $limit > 0 ? $limit : $this->database_gc_batch_size;
+		$items    = $this->database_items_table;
+		$prefetch = $this->database_prefetch_table;
+		$now      = time();
+		$deleted  = 0;
 
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$expired = $wpdb->query( $wpdb->prepare( "DELETE FROM `{$items}` WHERE expires_at <= %d ORDER BY expires_at LIMIT %d", $now, $limit ) );
@@ -3877,6 +3995,14 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 
 		if ( is_int( $expired ) ) {
 			$deleted += $expired;
+		}
+
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$expired_prefetch = $wpdb->query( $wpdb->prepare( "DELETE FROM `{$prefetch}` WHERE expires_at <= %d ORDER BY expires_at LIMIT %d", $now, $limit ) );
+		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+
+		if ( is_int( $expired_prefetch ) ) {
+			$deleted += $expired_prefetch;
 		}
 
 		return $deleted;
@@ -3971,6 +4097,10 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 			'calculated_at' => time(),
 		);
 
+		if ( false !== $result ) {
+			$this->clear_database_miss( $key, $group );
+		}
+
 		return false !== $result;
 	}
 
@@ -4055,6 +4185,7 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 				'mtime'         => $expires_at,
 				'calculated_at' => $now,
 			);
+			$this->clear_database_miss( $cache_key, $group );
 		}
 
 		return $results;
@@ -4187,6 +4318,7 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
 		$this->invalidate_expiration_cache( $key, $group );
+		$this->clear_database_miss( $key, $group );
 
 		return is_int( $deleted ) && $deleted > 0;
 	}
@@ -4261,6 +4393,7 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 			foreach ( $lookup[ $hash ] as $key ) {
 				$results[ $key ] = true;
 				$this->invalidate_expiration_cache( $keys[ $key ], $group );
+				$this->clear_database_miss( $keys[ $key ], $group );
 			}
 		}
 
@@ -4275,19 +4408,22 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 	protected function flush_database(): bool {
 		global $wpdb;
 
-		if ( ! $this->database_available || ! isset( $wpdb ) || ! is_object( $wpdb ) || '' === $this->database_items_table ) {
+		if ( ! $this->database_available || ! isset( $wpdb ) || ! is_object( $wpdb ) || '' === $this->database_items_table || '' === $this->database_prefetch_table ) {
 			return false;
 		}
 
-		$items = $this->database_items_table;
+		$items    = $this->database_items_table;
+		$prefetch = $this->database_prefetch_table;
 
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-		$items_deleted = $wpdb->query( "DELETE FROM `{$items}`" );
+		$items_deleted    = $wpdb->query( "DELETE FROM `{$items}`" );
+		$prefetch_deleted = $wpdb->query( "DELETE FROM `{$prefetch}`" );
 		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
 		$this->expiration_cache = array();
+		$this->clear_database_misses();
 
-		return false !== $items_deleted;
+		return false !== $items_deleted && false !== $prefetch_deleted;
 	}
 
 	/**
@@ -4311,12 +4447,13 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 		// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
 		$this->expiration_cache = array();
+		$this->clear_database_misses( $group );
 
 		return false !== $deleted;
 	}
 
 	/**
-	 * Loads the saved prefetch manifest through database batch hydration.
+	 * Loads the saved prefetch key set through one database batch hydration query.
 	 *
 	 * @return void
 	 */
@@ -4331,29 +4468,86 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 		}
 		$this->record_prefetch_manifest_lookup( $prefetch_key );
 
-		$found    = null;
-		$manifest = $this->get( $prefetch_key, $this->prefetch_group, false, $found, false );
-		if ( true !== $found || ! is_array( $manifest ) || empty( $manifest['groups'] ) || ! is_array( $manifest['groups'] ) ) {
-			return;
-		}
-
-		$started = $this->begin_prefetch_manifest_load( $prefetch_key, $manifest );
-
-		try {
-			$this->load_prefetch_groups_from_database( $manifest['groups'] );
-		} finally {
-			$this->finish_prefetch_manifest_load( $started );
-		}
+		$this->load_prefetch_request_from_database( $prefetch_key );
 	}
 
 	/**
-	 * Hydrates prefetch groups from the database backend.
+	 * Saves the current runtime cache key set for the current URL/context.
 	 *
-	 * @param array $groups Grouped manifest keys.
 	 * @return void
 	 */
-	protected function load_prefetch_groups_from_database( array $groups ): void {
-		$requests = array();
+	public function save_prefetch_manifest(): void {
+		if ( ! $this->is_prefetch_enabled() ) {
+			return;
+		}
+
+		$prefetch_key = $this->get_prefetch_key();
+		if ( false === $prefetch_key ) {
+			return;
+		}
+
+		$started = microtime( true );
+		$groups  = $this->merge_database_miss_prefetch_groups( $this->build_prefetch_groups() );
+		if ( empty( $groups ) ) {
+			return;
+		}
+
+		$result = $this->save_prefetch_groups_to_database( $prefetch_key, $groups );
+		$this->record_prefetch_manifest_save( $groups, $started, $result );
+	}
+
+	/**
+	 * Adds request-local prefetch misses to the next database prefetch key set.
+	 *
+	 * @param array $groups Grouped cache keys.
+	 * @return array Grouped cache keys including request-local misses.
+	 */
+	protected function merge_database_miss_prefetch_groups( array $groups ): array {
+		foreach ( $this->database_misses as $group => $misses ) {
+			if ( ! is_string( $group ) || $group === $this->prefetch_group || ! is_array( $misses ) || empty( $misses ) || ! $this->should_persist( $group ) ) {
+				continue;
+			}
+
+			$keys = array();
+			if ( isset( $groups[ $group ] ) && is_array( $groups[ $group ] ) ) {
+				foreach ( $this->sanitize_prefetch_keys( $groups[ $group ] ) as $key ) {
+					$keys[ (string) $key ] = $key;
+				}
+			}
+
+			foreach ( array_keys( $misses ) as $key ) {
+				if ( is_int( $key ) || ( is_string( $key ) && '' !== trim( $key ) ) ) {
+					$keys[ (string) $key ] = $key;
+				}
+			}
+
+			if ( ! empty( $keys ) ) {
+				$groups[ $group ] = array_values( $keys );
+			}
+		}
+
+		return $groups;
+	}
+
+	/**
+	 * Saves grouped prefetch keys to the normalized database prefetch table.
+	 *
+	 * @param string $prefetch_key Request prefetch key.
+	 * @param array  $groups       Grouped cache keys.
+	 * @return bool Whether the key set was saved.
+	 */
+	protected function save_prefetch_groups_to_database( string $prefetch_key, array $groups ): bool {
+		global $wpdb;
+
+		if ( empty( $groups ) || ! $this->database_available || ! isset( $wpdb ) || ! is_object( $wpdb ) || '' === $this->database_prefetch_table ) {
+			return false;
+		}
+
+		$request_hash = preg_match( '/^[a-f0-9]{32}$/i', $prefetch_key ) ? strtolower( $prefetch_key ) : md5( $prefetch_key );
+		$expires_at   = time() + WP_FOCUS_PREFETCH_TTL;
+		$now          = time();
+		$table        = $this->database_prefetch_table;
+		$rows         = array();
 
 		foreach ( $groups as $group => $keys ) {
 			if ( ! is_string( $group ) || $group === $this->prefetch_group || ! is_array( $keys ) || empty( $keys ) ) {
@@ -4365,8 +4559,6 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 				continue;
 			}
 
-			$this->record_prefetch_requested_keys( $group, $keys );
-
 			if ( ! $this->should_persist( $group ) ) {
 				continue;
 			}
@@ -4374,79 +4566,97 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 			$bucket = $this->get_database_bucket_identity( $group );
 
 			foreach ( $keys as $key ) {
-				$cache_key  = $this->key( $key, $group );
-				$key_hash   = md5( $cache_key );
-				$lookup_key = $bucket['bucket_hash'] . ':' . $key_hash;
-
-				$requests[ $lookup_key ] = array(
-					'group'     => $group,
-					'raw_key'   => $key,
-					'cache_key' => $cache_key,
-					'key_hash'  => $key_hash,
-					'bucket'    => $bucket,
+				$cache_key = $this->key( $key, $group );
+				$rows[]    = array(
+					'request_hash' => $request_hash,
+					'bucket_hash'  => $bucket['bucket_hash'],
+					'key_hash'     => md5( $cache_key ),
+					'cache_group'  => $group,
+					'cache_key'    => $cache_key,
 				);
 			}
 		}
 
-		if ( empty( $requests ) ) {
-			return;
+		if ( empty( $rows ) ) {
+			return false;
 		}
 
-		foreach ( array_chunk( $requests, max( 1, $this->database_prefetch_chunk_size ), true ) as $chunk ) {
-			$this->load_prefetch_request_chunk_from_database( $chunk );
+		$saved = true;
+		foreach ( array_chunk( $rows, max( 1, $this->database_prefetch_chunk_size ) ) as $chunk ) {
+			$placeholders = array();
+			$values       = array();
+
+			foreach ( $chunk as $row ) {
+				$placeholders[] = '(UNHEX(%s), UNHEX(%s), UNHEX(%s), %s, %s, %d, %d, %d)';
+				$values         = array_merge(
+					$values,
+					array(
+						$row['request_hash'],
+						$row['bucket_hash'],
+						$row['key_hash'],
+						$row['cache_group'],
+						$row['cache_key'],
+						$expires_at,
+						$now,
+						$now,
+					)
+				);
+			}
+
+			$values_sql = implode( ', ', $placeholders );
+
+			// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+			$result = $wpdb->query(
+				$wpdb->prepare(
+					"INSERT INTO `{$table}` (request_hash, bucket_hash, key_hash, cache_group, cache_key, expires_at, created_at, updated_at)
+					VALUES {$values_sql}
+					ON DUPLICATE KEY UPDATE cache_group = VALUES(cache_group), cache_key = VALUES(cache_key), expires_at = VALUES(expires_at), updated_at = VALUES(updated_at)",
+					$values
+				)
+			);
+			// phpcs:enable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+
+			if ( false === $result ) {
+				$saved = false;
+			}
 		}
+
+		return $saved;
 	}
 
 	/**
-	 * Hydrates one prefetch request chunk from the database.
+	 * Hydrates one request's normalized prefetch key set from the database.
 	 *
-	 * @param array $requests Prefetch request data.
-	 * @return void
+	 * @param string $prefetch_key Request prefetch key.
+	 * @return bool Whether any prefetch key rows were processed.
 	 */
-	protected function load_prefetch_request_chunk_from_database( array $requests ): void {
+	protected function load_prefetch_request_from_database( string $prefetch_key ): bool {
 		global $wpdb;
 
-		if ( empty( $requests ) || ! $this->database_available || ! isset( $wpdb ) || ! is_object( $wpdb ) || '' === $this->database_items_table ) {
-			return;
+		if ( ! $this->database_available || ! isset( $wpdb ) || ! is_object( $wpdb ) || '' === $this->database_items_table || '' === $this->database_prefetch_table ) {
+			return false;
 		}
 
-		$clauses   = array();
-		$values    = array();
-		$by_bucket = array();
-		$table     = $this->database_items_table;
-
-		foreach ( $requests as $request ) {
-			$bucket_key = $request['bucket']['bucket_hash'];
-			if ( ! isset( $by_bucket[ $bucket_key ] ) ) {
-				$by_bucket[ $bucket_key ] = array(
-					'bucket_hash' => $request['bucket']['bucket_hash'],
-					'key_hashes'  => array(),
-				);
-			}
-
-			$by_bucket[ $bucket_key ]['key_hashes'][] = $request['key_hash'];
-		}
-
-		foreach ( $by_bucket as $bucket ) {
-			$key_hashes   = array_values( array_unique( $bucket['key_hashes'] ) );
-			$placeholders = implode( ', ', array_fill( 0, count( $key_hashes ), 'UNHEX(%s)' ) );
-
-			$clauses[] = "(bucket_hash = UNHEX(%s) AND key_hash IN ({$placeholders}))";
-			$values    = array_merge( $values, array( $bucket['bucket_hash'] ), $key_hashes );
-		}
-
-		$started = microtime( true );
-
-		$this->record_prefetch_load_operation();
-
-		$values[] = time();
-		$where    = implode( ' OR ', $clauses );
+		$request_hash = preg_match( '/^[a-f0-9]{32}$/i', $prefetch_key ) ? strtolower( $prefetch_key ) : md5( $prefetch_key );
+		$items        = $this->database_items_table;
+		$prefetch     = $this->database_prefetch_table;
+		$now          = time();
+		$started      = microtime( true );
 
 		// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT HEX(bucket_hash) AS bucket_hash, HEX(key_hash) AS key_hash, cache_key, cache_value, expires_at FROM `{$table}` WHERE ({$where}) AND expires_at > %d",
-				$values
+				"SELECT p.cache_group, p.cache_key, HEX(p.bucket_hash) AS bucket_hash, HEX(p.key_hash) AS key_hash, i.cache_value, i.expires_at
+				FROM `{$prefetch}` p
+				LEFT JOIN `{$items}` i
+					ON i.bucket_hash = p.bucket_hash
+					AND i.key_hash = p.key_hash
+					AND i.expires_at > %d
+				WHERE p.request_hash = UNHEX(%s)
+					AND p.expires_at > %d",
+				$now,
+				$request_hash,
+				$now
 			),
 			ARRAY_A
 		);
@@ -4454,37 +4664,97 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 
 		$elapsed = microtime( true ) - $started;
 
-		if ( ! is_array( $rows ) ) {
-			$this->record_database_prefetch_qm_operations( $requests, array(), $started, $elapsed );
-			return;
+		if ( ! is_array( $rows ) || empty( $rows ) ) {
+			return false;
 		}
 
+		$groups        = array();
+		$requests      = array();
 		$loaded_values = array();
-		$now           = time();
 
 		foreach ( $rows as $row ) {
-			$lookup_key = strtolower( (string) $row['bucket_hash'] ) . ':' . strtolower( (string) $row['key_hash'] );
-			if ( ! isset( $requests[ $lookup_key ] ) ) {
+			$group = (string) ( $row['cache_group'] ?? '' );
+			if ( '' === $group || $group === $this->prefetch_group || ! $this->should_persist( $group ) ) {
 				continue;
 			}
 
-			$request = $requests[ $lookup_key ];
-
-			$value = $this->unserialize_database_value( (string) $row['cache_value'], (string) $row['cache_key'], $request['group'] );
-			if ( ! $value['found'] ) {
+			$cache_key = (string) ( $row['cache_key'] ?? '' );
+			if ( '' === trim( $cache_key ) ) {
 				continue;
 			}
 
-			$this->cache[ $request['group'] ][ $request['cache_key'] ]                 = $value['value'];
-			$this->expiration_cache[ $request['group'] . ':' . $request['cache_key'] ] = array(
-				'mtime'         => (int) $row['expires_at'],
-				'calculated_at' => $now,
+			$bucket_hash = strtolower( (string) ( $row['bucket_hash'] ?? '' ) );
+			$key_hash    = strtolower( (string) ( $row['key_hash'] ?? '' ) );
+			if ( '' === $bucket_hash || '' === $key_hash ) {
+				continue;
+			}
+
+			$lookup_key = $bucket_hash . ':' . $key_hash;
+
+			$groups[ $group ][ $cache_key ] = $cache_key;
+			$requests[ $lookup_key ]        = array(
+				'group'     => $group,
+				'raw_key'   => $cache_key,
+				'cache_key' => $cache_key,
+				'key_hash'  => $key_hash,
+				'bucket'    => array(
+					'bucket_hash' => $bucket_hash,
+				),
 			);
-			$this->record_prefetch_loaded_key( $request['group'], $request['cache_key'] );
-			$loaded_values[ $lookup_key ] = $value['value'];
 		}
 
-		$this->record_database_prefetch_qm_operations( $requests, $loaded_values, $started, $elapsed );
+		if ( empty( $requests ) ) {
+			return false;
+		}
+
+		$this->begin_prefetch_manifest_load( $prefetch_key, array( 'groups' => $groups ) );
+		$this->record_prefetch_load_operation();
+
+		try {
+			foreach ( $groups as $group => $keys ) {
+				$this->record_prefetch_requested_keys( (string) $group, array_values( $keys ) );
+			}
+
+			foreach ( $rows as $row ) {
+				$bucket_hash = strtolower( (string) ( $row['bucket_hash'] ?? '' ) );
+				$key_hash    = strtolower( (string) ( $row['key_hash'] ?? '' ) );
+				$lookup_key  = $bucket_hash . ':' . $key_hash;
+
+				if ( ! isset( $requests[ $lookup_key ] ) ) {
+					continue;
+				}
+
+				$request   = $requests[ $lookup_key ];
+				$group     = (string) $request['group'];
+				$cache_key = (string) $request['cache_key'];
+
+				$this->record_prefetch_loaded_key( $group, $cache_key );
+
+				if ( null === $row['cache_value'] || null === $row['expires_at'] ) {
+					$this->mark_database_miss( $cache_key, $group );
+					continue;
+				}
+
+				$value = $this->unserialize_database_value( (string) $row['cache_value'], $cache_key, $group );
+				if ( ! $value['found'] ) {
+					$this->mark_database_miss( $cache_key, $group );
+					continue;
+				}
+
+				$this->cache[ $group ][ $cache_key ]                 = $value['value'];
+				$this->expiration_cache[ $group . ':' . $cache_key ] = array(
+					'mtime'         => (int) $row['expires_at'],
+					'calculated_at' => $now,
+				);
+				$this->clear_database_miss( $cache_key, $group );
+				$loaded_values[ $lookup_key ] = $value['value'];
+			}
+		} finally {
+			$this->record_database_prefetch_qm_operations( $requests, $loaded_values, $started, $elapsed );
+			$this->finish_prefetch_manifest_load( $started );
+		}
+
+		return true;
 	}
 
 	/**
