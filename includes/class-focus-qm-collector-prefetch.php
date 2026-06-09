@@ -49,7 +49,7 @@ class FOCUS_QM_Collector_Prefetch extends QM_Collector {
 	 *
 	 * @return QM_Data Storage object.
 	 */
-	public function get_storage() {
+	public function get_storage(): QM_Data {
 		return new QM_Data();
 	}
 
