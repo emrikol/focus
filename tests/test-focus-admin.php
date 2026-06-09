@@ -94,6 +94,63 @@ class Tests_Focus_Admin_Object_Cache_Double {
 	}
 }
 
+if ( ! class_exists( 'QM_Data' ) ) {
+	class QM_Data {
+		public $prefetch;
+	}
+}
+
+if ( ! class_exists( 'QM_Collector' ) ) {
+	class QM_Collector {
+		public $id = 'stub';
+		public $data;
+
+		public function __construct() {
+			$this->data = $this->get_storage();
+		}
+
+		public function get_storage() {
+			return new QM_Data();
+		}
+
+		public function get_data() {
+			return $this->data;
+		}
+	}
+}
+
+if ( ! class_exists( 'QM_Output_Html' ) ) {
+	class QM_Output_Html {
+		protected $collector;
+
+		public function __construct( QM_Collector $collector ) {
+			$this->collector = $collector;
+		}
+
+		protected function before_non_tabular_output() {
+			echo '<div class="qm qm-non-tabular">';
+		}
+
+		protected function after_non_tabular_output() {
+			echo '</div>';
+		}
+
+		protected function menu( array $args ) {
+			return $args;
+		}
+	}
+}
+
+if ( ! class_exists( 'QM_Collectors' ) ) {
+	class QM_Collectors {
+		public static array $collectors = array();
+
+		public static function get( string $id ) {
+			return self::$collectors[ $id ] ?? null;
+		}
+	}
+}
+
 class Tests_Focus_Admin extends WP_UnitTestCase {
 	private string $dropin_path;
 	private bool $dropin_existed = false;
@@ -182,21 +239,161 @@ class Tests_Focus_Admin extends WP_UnitTestCase {
 		$wp_settings_errors = array();
 	}
 
-	public function test_constructor_registers_hooks_and_default_links() {
-		$admin = $this->admin();
+		public function test_constructor_registers_hooks_and_default_links() {
+			$admin = $this->admin();
 
-		$this->assertNotFalse( has_action( is_multisite() ? 'network_admin_menu' : 'admin_menu', array( $admin, 'add_admin_menu_page' ) ) );
-		$this->assertNotFalse( has_action( 'admin_notices', array( $admin, 'show_admin_notices' ) ) );
-		$this->assertNotFalse( has_action( 'network_admin_notices', array( $admin, 'show_admin_notices' ) ) );
+			$this->assertNotFalse( has_action( is_multisite() ? 'network_admin_menu' : 'admin_menu', array( $admin, 'add_admin_menu_page' ) ) );
+			$this->assertNotFalse( has_action( 'admin_notices', array( $admin, 'show_admin_notices' ) ) );
+			$this->assertNotFalse( has_action( 'network_admin_notices', array( $admin, 'show_admin_notices' ) ) );
+			$this->assertSame( 20, has_action( 'plugins_loaded', array( $admin, 'maybe_register_query_monitor' ) ) );
+			$admin->maybe_register_query_monitor();
 
-		$links = $admin->add_plugin_actions_links( array( 'deactivate' => 'Deactivate' ) );
+			$links = $admin->add_plugin_actions_links( array( 'deactivate' => 'Deactivate' ) );
 
-		$this->assertStringContainsString( 'Settings', $links[0] );
-		$this->assertSame( 'Deactivate', $links['deactivate'] );
-	}
+			$this->assertStringContainsString( 'Settings', $links[0] );
+			$this->assertSame( 'Deactivate', $links['deactivate'] );
+		}
 
-	public function test_constructor_uses_plugin_constant_when_file_is_omitted() {
-		$admin = new FOCUS_Cache();
+		public function test_query_monitor_prefetch_collector_and_output() {
+			require_once dirname( __DIR__ ) . '/includes/class-focus-query-monitor.php';
+			require_once dirname( __DIR__ ) . '/includes/class-focus-qm-collector-prefetch.php';
+			require_once dirname( __DIR__ ) . '/includes/class-focus-qm-output-html-prefetch.php';
+
+			global $wp_object_cache;
+
+			$original_cache = $wp_object_cache;
+			$original_prefetch_stats = $wp_object_cache->prefetch_stats ?? null;
+			$original_prefetched_keys = $wp_object_cache->prefetched_keys ?? null;
+			$original_prefetch_requested_keys = $wp_object_cache->prefetch_requested_keys ?? null;
+			$original_test_prefetch_enabled = $wp_object_cache->test_prefetch_enabled ?? null;
+
+			try {
+				$empty_collector = new FOCUS_QM_Collector_Prefetch();
+				$this->assertSame( 'FOCUS Prefetch', $empty_collector->name() );
+				$this->assertInstanceOf( QM_Data::class, $empty_collector->get_storage() );
+
+				$wp_object_cache = new stdClass(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+				$empty_collector->process();
+				$this->assertFalse( isset( $empty_collector->get_data()->prefetch ) );
+
+				$wp_object_cache = $original_cache; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+				$wp_object_cache->test_prefetch_enabled = true;
+				$wp_object_cache->prefetch_requested_keys = array(
+					'qm_prefetch_group' => array(
+						'used_key' => 'used_key',
+						'unused_key' => 'unused_key',
+						'missing_key' => 'missing_key',
+					),
+				);
+				$wp_object_cache->prefetched_keys = array(
+					'qm_prefetch_group' => array(
+						'used_key' => true,
+						'unused_key' => false,
+					),
+				);
+				$wp_object_cache->prefetch_stats = array_merge(
+					$wp_object_cache->prefetch_stats,
+					array(
+						'enabled'                  => true,
+						'backend'                  => 'file',
+						'key'                      => 'prefetch-key',
+						'manifest_found'           => true,
+						'manifest_groups'          => 1,
+						'manifest_keys'            => 3,
+						'requested_keys'           => 3,
+						'loaded_keys'              => 2,
+						'missing_keys'             => 1,
+						'used_keys'                => 1,
+						'unused_keys'              => 1,
+						'calls_saved'              => 1,
+						'net_calls_saved'          => 0,
+						'load_operations'          => 1,
+						'load_time'                => 0.001,
+						'estimated_time_saved'     => 0.0,
+						'saved_manifest_groups'    => 1,
+						'saved_manifest_keys'      => 3,
+						'saved_manifest_time'      => 0.001,
+						'saved_manifest_succeeded' => true,
+					)
+				);
+
+				$collector = new FOCUS_QM_Collector_Prefetch();
+				$collector->process();
+				$this->assertSame( 'file', $collector->get_data()->prefetch['backend'] );
+
+				FOCUS_Query_Monitor::register();
+				$this->assertNotFalse( has_filter( 'qm/collectors', array( 'FOCUS_Query_Monitor', 'register_collectors' ) ) );
+				$this->assertNotFalse( has_filter( 'qm/outputter/html', array( 'FOCUS_Query_Monitor', 'register_outputters' ) ) );
+
+				$collectors = FOCUS_Query_Monitor::register_collectors( array() );
+				$this->assertInstanceOf( FOCUS_QM_Collector_Prefetch::class, $collectors['focus_prefetch'] );
+
+				QM_Collectors::$collectors = array();
+				$this->assertSame( array(), FOCUS_Query_Monitor::register_outputters( array() ) );
+
+				QM_Collectors::$collectors = $collectors;
+				$outputters = FOCUS_Query_Monitor::register_outputters( array() );
+				$this->assertInstanceOf( FOCUS_QM_Output_Html_Prefetch::class, $outputters['focus_prefetch'] );
+
+				$outputter = new FOCUS_QM_Output_Html_Prefetch( $collector );
+				$this->assertContains( 'qm-focus-prefetch', $outputter->admin_class( array() ) );
+
+				$menu = $outputter->panel_menu(
+					array(
+						'object_cache' => array(
+							'children' => array(),
+						),
+					)
+				);
+				$this->assertSame( 'qm-focus_prefetch', $menu['object_cache']['children'][0]['id'] );
+
+				$fallback_menu = $outputter->panel_menu( array() );
+				$this->assertSame( 'qm-focus_prefetch', $fallback_menu['focus_prefetch']['id'] );
+
+				ob_start();
+				$outputter->output();
+				$output = ob_get_clean();
+
+				$this->assertStringContainsString( 'Prefetch Summary', $output );
+				$this->assertStringContainsString( 'Individual Calls Avoided', $output );
+				$this->assertStringContainsString( 'Prefetched And Used', $output );
+				$this->assertStringContainsString( 'Prefetched But Unused', $output );
+				$this->assertStringContainsString( 'unused_key', $output );
+
+				$empty_outputter = new FOCUS_QM_Output_Html_Prefetch( new FOCUS_QM_Collector_Prefetch() );
+				ob_start();
+				$empty_outputter->output();
+				$this->assertSame( '', ob_get_clean() );
+
+				$collector->data->prefetch['used_groups'] = array();
+				$collector->data->prefetch['unused_groups'] = array();
+				ob_start();
+				$outputter->output();
+				$summary_only_output = ob_get_clean();
+				$this->assertStringContainsString( 'Prefetch Summary', $summary_only_output );
+				$this->assertStringNotContainsString( 'Prefetched But Unused', $summary_only_output );
+			} finally {
+				if ( null !== $original_prefetch_stats && isset( $original_cache->prefetch_stats ) ) {
+					$original_cache->prefetch_stats = $original_prefetch_stats;
+				}
+				if ( null !== $original_prefetched_keys && isset( $original_cache->prefetched_keys ) ) {
+					$original_cache->prefetched_keys = $original_prefetched_keys;
+				}
+				if ( null !== $original_prefetch_requested_keys && isset( $original_cache->prefetch_requested_keys ) ) {
+					$original_cache->prefetch_requested_keys = $original_prefetch_requested_keys;
+				}
+				if ( null !== $original_test_prefetch_enabled && isset( $original_cache->test_prefetch_enabled ) ) {
+					$original_cache->test_prefetch_enabled = $original_test_prefetch_enabled;
+				}
+				$wp_object_cache = $original_cache; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited
+				QM_Collectors::$collectors = array();
+				remove_filter( 'qm/collectors', array( 'FOCUS_Query_Monitor', 'register_collectors' ), 10 );
+				remove_filter( 'qm/outputter/html', array( 'FOCUS_Query_Monitor', 'register_outputters' ), 10 );
+			}
+		}
+
+		public function test_constructor_uses_plugin_constant_when_file_is_omitted() {
+			$admin = new FOCUS_Cache();
 		$links = $admin->add_plugin_actions_links( array() );
 
 		$this->assertStringContainsString( 'Settings', $links[0] );

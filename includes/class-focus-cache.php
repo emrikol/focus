@@ -85,6 +85,7 @@ class FOCUS_Cache {
 		add_action( 'load-' . $this->screen, array( $this, 'do_admin_actions' ) );
 		add_action( 'load-' . $this->screen, array( $this, 'add_admin_page_notices' ) );
 		add_action( 'focus_cache_database_gc', array( $this, 'run_database_gc' ) );
+		add_action( 'plugins_loaded', array( $this, 'maybe_register_query_monitor' ), 20 );
 
 		add_filter(
 			sprintf(
@@ -170,6 +171,28 @@ class FOCUS_Cache {
 	 */
 	public function get_focus_backend(): string {
 		return defined( 'WP_FOCUS_BACKEND' ) ? (string) WP_FOCUS_BACKEND : 'file';
+	}
+
+	/**
+	 * Registers FOCUS Query Monitor panels when Query Monitor is available.
+	 *
+	 * @since 1.1.0
+	 * @access public
+	 *
+	 * @return void
+	 */
+	public function maybe_register_query_monitor(): void {
+		// @codeCoverageIgnoreStart
+		if ( ! class_exists( 'QM_Collector' ) || ! class_exists( 'QM_Data' ) || ! class_exists( 'QM_Output_Html' ) || ! class_exists( 'QM_Collectors' ) ) {
+			return;
+		}
+		// @codeCoverageIgnoreEnd
+
+		require_once __DIR__ . '/class-focus-query-monitor.php';
+		require_once __DIR__ . '/class-focus-qm-collector-prefetch.php';
+		require_once __DIR__ . '/class-focus-qm-output-html-prefetch.php';
+
+		FOCUS_Query_Monitor::register();
 	}
 
 	/**

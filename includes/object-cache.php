@@ -105,6 +105,13 @@ if ( ! defined( 'WP_FOCUS_DATABASE_GC_PROBABILITY' ) ) {
 if ( ! defined( 'WP_FOCUS_DATABASE_PREFETCH_CHUNK_SIZE' ) ) {
 	define( 'WP_FOCUS_DATABASE_PREFETCH_CHUNK_SIZE', 500 );
 }
+
+/**
+ * Query Monitor slow object-cache operation threshold in seconds.
+ */
+if ( ! defined( 'WP_FOCUS_QM_SLOW_OP_THRESHOLD' ) ) {
+	define( 'WP_FOCUS_QM_SLOW_OP_THRESHOLD', 0.005 );
+}
 // @codeCoverageIgnoreEnd
 
 /**
@@ -694,6 +701,72 @@ class WP_Object_Cache {
 	public array $group_ops = array();
 
 	/**
+	 * Operation counts exposed through the Query Monitor-compatible get_stats() API.
+	 *
+	 * @since 1.1.0
+	 * @access public
+	 * @var array
+	 */
+	public array $stats = array(
+		'get'          => 0,
+		'get_local'    => 0,
+		'get_multi'    => 0,
+		'set'          => 0,
+		'set_local'    => 0,
+		'add'          => 0,
+		'delete'       => 0,
+		'delete_local' => 0,
+		'flush'        => 0,
+		'flush_group'  => 0,
+		'slow-ops'     => 0,
+	);
+
+	/**
+	 * Structured cache operations exposed through get_stats().
+	 *
+	 * @since 1.1.0
+	 * @access public
+	 * @var array
+	 */
+	public array $qm_operations = array();
+
+	/**
+	 * Structured slow cache operations exposed through get_stats().
+	 *
+	 * @since 1.1.0
+	 * @access public
+	 * @var array
+	 */
+	public array $qm_slow_operations = array();
+
+	/**
+	 * Total time spent in instrumented cache operations.
+	 *
+	 * @since 1.1.0
+	 * @access public
+	 * @var float
+	 */
+	public float $time_total = 0.0;
+
+	/**
+	 * Total serialized size of values handled by instrumented cache operations.
+	 *
+	 * @since 1.1.0
+	 * @access public
+	 * @var int
+	 */
+	public int $size_total = 0;
+
+	/**
+	 * Slow object-cache operation threshold in seconds.
+	 *
+	 * @since 1.1.0
+	 * @access public
+	 * @var float
+	 */
+	public float $slow_op_microseconds = WP_FOCUS_QM_SLOW_OP_THRESHOLD;
+
+	/**
 	 * Holds the cached objects.
 	 *
 	 * @since 0.1.0
@@ -764,6 +837,67 @@ class WP_Object_Cache {
 	 * @var string
 	 */
 	public string $prefetch_group = 'focus_prefetch';
+
+	/**
+	 * Whether a prefetch manifest is currently hydrating the runtime cache.
+	 *
+	 * @since 1.1.0
+	 * @access public
+	 * @var bool
+	 */
+	public bool $prefetch_loading = false;
+
+	/**
+	 * Runtime keys loaded by prefetch, keyed by group and normalized cache key.
+	 *
+	 * Values are false until the key is later read by application code.
+	 *
+	 * @since 1.1.0
+	 * @access public
+	 * @var array
+	 */
+	public array $prefetched_keys = array();
+
+	/**
+	 * Runtime keys requested by prefetch, keyed by group and normalized cache key.
+	 *
+	 * @since 1.1.0
+	 * @access public
+	 * @var array
+	 */
+	public array $prefetch_requested_keys = array();
+
+	/**
+	 * Query Monitor-compatible prefetch statistics.
+	 *
+	 * @since 1.1.0
+	 * @access public
+	 * @var array
+	 */
+	public array $prefetch_stats = array(
+		'enabled'                  => false,
+		'backend'                  => 'file',
+		'key'                      => null,
+		'manifest_found'           => false,
+		'manifest_groups'          => 0,
+		'manifest_keys'            => 0,
+		'requested_keys'           => 0,
+		'loaded_keys'              => 0,
+		'missing_keys'             => 0,
+		'used_keys'                => 0,
+		'unused_keys'              => 0,
+		'calls_saved'              => 0,
+		'net_calls_saved'          => 0,
+		'load_operations'          => 0,
+		'load_time'                => 0.0,
+		'estimated_time_saved'     => 0.0,
+		'saved_manifest_groups'    => 0,
+		'saved_manifest_keys'      => 0,
+		'saved_manifest_time'      => 0.0,
+		'saved_manifest_succeeded' => false,
+		'used_groups'              => array(),
+		'unused_groups'            => array(),
+	);
 
 	/**
 	 * Test mode flag for prefetch functionality.
@@ -1203,14 +1337,35 @@ class WP_Object_Cache {
 		}
 
 		$group = $this->sanitize_cache_group( $group );
+		$start = microtime( true );
 
 		$found = null;
 		$this->get( $key, $group, false, $found, false );
 		if ( true === $found ) {
+			$this->record_qm_operation( 'add', $this->key( $key, $group ), $group, null, $start, 'already_exists' );
 			return false;
 		}
 
-		return $this->set( $key, $data, $group, (int) $expire );
+		$key    = $this->key( $key, $group );
+		$expire = (int) $expire;
+
+		if ( 0 === $expire ) {
+			$expire = $this->default_expiration;
+		}
+
+		if ( is_object( $data ) ) {
+			$data = clone $data;
+		}
+
+		$this->cache[ $group ][ $key ] = $data;
+
+		// Stats.
+		$this->group_ops[ $group ][] = 'Add ' . $group . '/' . $key . ' (' . $expire . 's)';
+
+		$result = $this->save( $key, $data, $group, $expire );
+		$this->record_qm_operation( 'add', $key, $group, $data, $start, $result ? 'stored' : 'failed' );
+
+		return $result;
 	}
 
 	/**
@@ -1345,6 +1500,7 @@ class WP_Object_Cache {
 		$group  = $this->sanitize_cache_group( $group );
 		$key    = $this->key( $key, $group );
 		$return = false;
+		$start  = microtime( true );
 
 		$exists_in_memory = $this->isset_internal( $key, $group );
 		if ( $this->is_database_backend() ) {
@@ -1371,6 +1527,7 @@ class WP_Object_Cache {
 
 		// Stats.
 		$this->group_ops[ $group ][] = 'Delete ' . $key;
+		$this->record_qm_operation( $return ? 'delete' : 'delete_local', $key, $group, null, $start, $return ? 'deleted' : 'not_found' );
 
 		return $return;
 	}
@@ -1393,11 +1550,15 @@ class WP_Object_Cache {
 			return false;
 		}
 
+		$start = microtime( true );
+
 		// Delete local cache group.
 		unset( $this->cache[ $group ] );
 
 		if ( $this->is_database_backend() ) {
-			return $this->flush_database_group( $group );
+			$result = $this->flush_database_group( $group );
+			$this->record_qm_operation( 'flush_group', $group, $group, null, $start, $result ? 'flushed' : 'failed' );
+			return $result;
 		}
 
 		// Mark all files as expired, just in case delete times out.
@@ -1410,6 +1571,7 @@ class WP_Object_Cache {
 		// Delete the cache group dir.
 		$this->rm_cache_dir( $this->cache_dir . $group );
 
+		$this->record_qm_operation( 'flush_group', $group, $group, null, $start, 'flushed' );
 		return true;
 	}
 
@@ -1422,14 +1584,19 @@ class WP_Object_Cache {
 	 * @return bool Always returns true.
 	 */
 	public function flush() {
+		$start = microtime( true );
+
 		if ( $this->is_database_backend() ) {
 			$this->cache = array();
-			return $this->flush_database();
+			$result      = $this->flush_database();
+			$this->record_qm_operation( 'flush', 'all', 'default', null, $start, $result ? 'flushed' : 'failed' );
+			return $result;
 		}
 
 		// Delete all data in cache directory, empty memory cache.
 		$this->rm_cache_dir( $this->cache_dir );
 		$this->cache = array();
+		$this->record_qm_operation( 'flush', 'all', 'default', null, $start, 'flushed' );
 		return true;
 	}
 
@@ -1483,6 +1650,7 @@ class WP_Object_Cache {
 
 		$group = $this->sanitize_cache_group( $group );
 		$key   = $this->key( $key, $group );
+		$start = microtime( true );
 
 		// Memory cache exists, please grab.
 		if ( $this->isset_internal( $key, $group ) && ! $force ) {
@@ -1498,6 +1666,10 @@ class WP_Object_Cache {
 				}
 
 				$found = true;
+				$this->record_prefetch_used_key( $group, $key );
+				if ( $stat ) {
+					$this->record_qm_operation( 'get_local', $key, $group, $this->cache[ $group ][ $key ], $start, 'memory' );
+				}
 				return $this->cache[ $group ][ $key ];
 			}
 		}
@@ -1516,10 +1688,16 @@ class WP_Object_Cache {
 
 				if ( is_object( $this->cache[ $group ][ $key ] ) ) {
 					$found = true;
+					if ( $stat ) {
+						$this->record_qm_operation( 'get', $key, $group, $this->cache[ $group ][ $key ], $start, 'database' );
+					}
 					return clone $this->cache[ $group ][ $key ];
 				}
 
 				$found = true;
+				if ( $stat ) {
+					$this->record_qm_operation( 'get', $key, $group, $this->cache[ $group ][ $key ], $start, 'database' );
+				}
 				return $this->cache[ $group ][ $key ];
 			}
 
@@ -1528,6 +1706,9 @@ class WP_Object_Cache {
 				++$this->cache_misses;
 			}
 			$found = false;
+			if ( $stat ) {
+				$this->record_qm_operation( 'get', $key, $group, null, $start, 'not_found' );
+			}
 			return false;
 		}
 
@@ -1544,6 +1725,9 @@ class WP_Object_Cache {
 				}
 
 				$found = false;
+				if ( $stat ) {
+					$this->record_qm_operation( 'get', $key, $group, null, $start, 'expired' );
+				}
 				return false;
 			}
 
@@ -1590,10 +1774,16 @@ class WP_Object_Cache {
 
 			if ( is_object( $this->cache[ $group ][ $key ] ) ) {
 				$found = true;
+				if ( $stat ) {
+					$this->record_qm_operation( 'get', $key, $group, $this->cache[ $group ][ $key ], $start, 'file' );
+				}
 				return clone $this->cache[ $group ][ $key ];
 			}
 
 			$found = true;
+			if ( $stat ) {
+				$this->record_qm_operation( 'get', $key, $group, $this->cache[ $group ][ $key ], $start, 'file' );
+			}
 			return $this->cache[ $group ][ $key ];
 		}
 
@@ -1602,6 +1792,9 @@ class WP_Object_Cache {
 			++$this->cache_misses;
 		}
 		$found = false;
+		if ( $stat ) {
+			$this->record_qm_operation( 'get', $key, $group, null, $start, 'not_found' );
+		}
 		return false;
 	}
 
@@ -1723,6 +1916,7 @@ class WP_Object_Cache {
 		$group  = $this->sanitize_cache_group( $group );
 		$key    = $this->key( $key, $group );
 		$expire = (int) $expire;
+		$start  = microtime( true );
 
 		if ( 0 === $expire ) {
 			$expire = $this->default_expiration;
@@ -1745,7 +1939,10 @@ class WP_Object_Cache {
 		// Stats.
 		$this->group_ops[ $group ][] = 'Set ' . $group . '/' . $key . ' (' . $expire . 's)';
 
-		return $this->save( $key, $data, $group, $expire );
+		$result = $this->save( $key, $data, $group, $expire );
+		$this->record_qm_operation( $this->should_persist( $group ) ? 'set' : 'set_local', $key, $group, $data, $start, $result ? 'stored' : 'failed' );
+
+		return $result;
 	}
 
 	/**
@@ -1784,6 +1981,327 @@ class WP_Object_Cache {
 	}
 
 	/**
+	 * Returns Query Monitor-compatible object-cache statistics.
+	 *
+	 * The shape matches the data contract used by WordPress VIP's
+	 * qm-object-cache collectors.
+	 *
+	 * @since 1.1.0
+	 *
+	 * @return array Object-cache statistics.
+	 */
+	public function get_stats(): array {
+		return array(
+			'totals'           => array(
+				'query_time' => $this->time_total,
+				'size'       => $this->size_total,
+			),
+			'operation_counts' => $this->stats,
+			'operations'       => $this->qm_operations,
+			'groups'           => $this->get_qm_operation_groups( $this->qm_operations ),
+			'slow-ops'         => $this->qm_slow_operations,
+			'slow-ops-groups'  => $this->get_qm_operation_groups( $this->qm_slow_operations ),
+			'prefetch'         => $this->get_prefetch_stats(),
+		);
+	}
+
+	/**
+	 * Returns prefetch statistics for Query Monitor consumers.
+	 *
+	 * @since 1.1.0
+	 *
+	 * @return array Prefetch statistics.
+	 */
+	public function get_prefetch_stats(): array {
+		$this->refresh_prefetch_stats();
+
+		return $this->prefetch_stats;
+	}
+
+	/**
+	 * Records one structured cache operation for Query Monitor consumers.
+	 *
+	 * @since 1.1.0
+	 *
+	 * @param string           $operation Operation name.
+	 * @param int|string|array $key       Cache key or keys.
+	 * @param string           $group     Cache group.
+	 * @param mixed            $data      Cache value used for size calculation.
+	 * @param float            $started   Operation start time from microtime( true ).
+	 * @param string           $result    Human-readable operation result.
+	 * @return void
+	 */
+	protected function record_qm_operation( string $operation, int|string|array $key, string $group, mixed $data, float $started, string $result ): void {
+		$time = microtime( true ) - $started;
+		$size = $this->get_qm_data_size( $data );
+
+		$this->stats[ $operation ] ??= 0;
+		++$this->stats[ $operation ];
+
+		$this->time_total += $time;
+		$this->size_total += $size;
+
+		$payload = array(
+			'key'    => $key,
+			'size'   => $size,
+			'time'   => $time,
+			'group'  => $group,
+			'result' => $result,
+		);
+
+		$this->qm_operations[ $operation ][] = $payload;
+
+		if ( $time > $this->slow_op_microseconds && 'get_multi' !== $operation ) {
+			++$this->stats['slow-ops'];
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_wp_debug_backtrace_summary -- Slow-operation Query Monitor rows need a stack summary.
+			$payload['backtrace']                     = function_exists( 'wp_debug_backtrace_summary' ) ? wp_debug_backtrace_summary() : null;
+			$this->qm_slow_operations[ $operation ][] = $payload;
+		}
+	}
+
+	/**
+	 * Calculates an operation payload size.
+	 *
+	 * @since 1.1.0
+	 *
+	 * @param mixed $data Cache operation data.
+	 * @return int Data size in bytes.
+	 */
+	protected function get_qm_data_size( mixed $data ): int {
+		if ( null === $data ) {
+			return 0;
+		}
+
+		if ( is_string( $data ) ) {
+			return strlen( $data );
+		}
+
+		return strlen( serialize( $data ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize
+	}
+
+	/**
+	 * Extracts unique operation groups for Query Monitor filters.
+	 *
+	 * @since 1.1.0
+	 *
+	 * @param array $operations Structured operations.
+	 * @return array Unique group names.
+	 */
+	protected function get_qm_operation_groups( array $operations ): array {
+		$groups = array();
+
+		foreach ( $operations as $operation_group ) {
+			foreach ( $operation_group as $operation ) {
+				if ( isset( $operation['group'] ) && ! in_array( $operation['group'], $groups, true ) ) {
+					$groups[] = $operation['group'];
+				}
+			}
+		}
+
+		return $groups;
+	}
+
+	/**
+	 * Records the current prefetch manifest lookup.
+	 *
+	 * @since 1.1.0
+	 *
+	 * @param string $prefetch_key Current prefetch manifest key.
+	 * @return void
+	 */
+	protected function record_prefetch_manifest_lookup( string $prefetch_key ): void {
+		$this->prefetch_stats['enabled'] = $this->is_prefetch_enabled();
+		$this->prefetch_stats['backend'] = $this->is_database_backend() ? 'database' : 'file';
+		$this->prefetch_stats['key']     = $prefetch_key;
+	}
+
+	/**
+	 * Starts tracking a prefetch manifest load.
+	 *
+	 * @since 1.1.0
+	 *
+	 * @param string $prefetch_key Current prefetch manifest key.
+	 * @param array  $manifest     Saved prefetch manifest.
+	 * @return float Load start time.
+	 */
+	protected function begin_prefetch_manifest_load( string $prefetch_key, array $manifest ): float {
+		$this->record_prefetch_manifest_lookup( $prefetch_key );
+
+		$groups = isset( $manifest['groups'] ) && is_array( $manifest['groups'] ) ? $manifest['groups'] : array();
+
+		$this->prefetch_stats['manifest_found']  = true;
+		$this->prefetch_stats['manifest_groups'] = count( $groups );
+		$this->prefetch_stats['manifest_keys']   = $this->count_prefetch_group_keys( $groups );
+		$this->prefetch_loading                  = true;
+
+		return microtime( true );
+	}
+
+	/**
+	 * Finishes tracking a prefetch manifest load.
+	 *
+	 * @since 1.1.0
+	 *
+	 * @param float $started Load start time.
+	 * @return void
+	 */
+	protected function finish_prefetch_manifest_load( float $started ): void {
+		$this->prefetch_loading             = false;
+		$this->prefetch_stats['load_time'] += microtime( true ) - $started;
+
+		$this->refresh_prefetch_stats();
+	}
+
+	/**
+	 * Records requested prefetch keys for a cache group.
+	 *
+	 * @since 1.1.0
+	 *
+	 * @param string $group Cache group.
+	 * @param array  $keys  Cache keys from the manifest.
+	 * @return void
+	 */
+	protected function record_prefetch_requested_keys( string $group, array $keys ): void {
+		foreach ( $keys as $key ) {
+			$cache_key = $this->key( $key, $group );
+
+			if ( isset( $this->prefetch_requested_keys[ $group ][ $cache_key ] ) ) {
+				continue;
+			}
+
+			$this->prefetch_requested_keys[ $group ][ $cache_key ] = $cache_key;
+			++$this->prefetch_stats['requested_keys'];
+		}
+	}
+
+	/**
+	 * Records one batched prefetch load operation.
+	 *
+	 * @since 1.1.0
+	 *
+	 * @return void
+	 */
+	protected function record_prefetch_load_operation(): void {
+		++$this->prefetch_stats['load_operations'];
+	}
+
+	/**
+	 * Records one cache key successfully hydrated by prefetch.
+	 *
+	 * @since 1.1.0
+	 *
+	 * @param string     $group Cache group.
+	 * @param int|string $key   Normalized cache key.
+	 * @return void
+	 */
+	protected function record_prefetch_loaded_key( string $group, int|string $key ): void {
+		if ( isset( $this->prefetched_keys[ $group ][ $key ] ) ) {
+			return;
+		}
+
+		$this->prefetched_keys[ $group ][ $key ] = false;
+		$this->refresh_prefetch_stats();
+	}
+
+	/**
+	 * Records one prefetched cache key later used by application code.
+	 *
+	 * @since 1.1.0
+	 *
+	 * @param string     $group Cache group.
+	 * @param int|string $key   Normalized cache key.
+	 * @return void
+	 */
+	protected function record_prefetch_used_key( string $group, int|string $key ): void {
+		if ( $this->prefetch_loading || ! isset( $this->prefetched_keys[ $group ][ $key ] ) || true === $this->prefetched_keys[ $group ][ $key ] ) {
+			return;
+		}
+
+		$this->prefetched_keys[ $group ][ $key ] = true;
+		$this->refresh_prefetch_stats();
+	}
+
+	/**
+	 * Records a saved prefetch manifest.
+	 *
+	 * @since 1.1.0
+	 *
+	 * @param array $groups  Saved prefetch groups.
+	 * @param float $started Save start time.
+	 * @param bool  $result  Whether the save succeeded.
+	 * @return void
+	 */
+	protected function record_prefetch_manifest_save( array $groups, float $started, bool $result ): void {
+		$this->prefetch_stats['saved_manifest_groups']    = count( $groups );
+		$this->prefetch_stats['saved_manifest_keys']      = $this->count_prefetch_group_keys( $groups );
+		$this->prefetch_stats['saved_manifest_time']      = microtime( true ) - $started;
+		$this->prefetch_stats['saved_manifest_succeeded'] = $result;
+	}
+
+	/**
+	 * Refreshes derived prefetch statistics.
+	 *
+	 * @since 1.1.0
+	 *
+	 * @return void
+	 */
+	protected function refresh_prefetch_stats(): void {
+		$used          = 0;
+		$unused        = 0;
+		$used_groups   = array();
+		$unused_groups = array();
+
+		foreach ( $this->prefetched_keys as $group => $keys ) {
+			foreach ( $keys as $key => $was_used ) {
+				if ( $was_used ) {
+					++$used;
+					$used_groups[ $group ][] = $key;
+				} else {
+					++$unused;
+					$unused_groups[ $group ][] = $key;
+				}
+			}
+		}
+
+		$loaded          = $used + $unused;
+		$load_operations = (int) $this->prefetch_stats['load_operations'];
+		$net_calls_saved = max( 0, $used - $load_operations );
+		$average_load    = $load_operations > 0 ? ( (float) $this->prefetch_stats['load_time'] / $load_operations ) : 0.0;
+
+		$this->prefetch_stats['enabled']              = $this->is_prefetch_enabled();
+		$this->prefetch_stats['backend']              = $this->is_database_backend() ? 'database' : 'file';
+		$this->prefetch_stats['loaded_keys']          = $loaded;
+		$this->prefetch_stats['used_keys']            = $used;
+		$this->prefetch_stats['unused_keys']          = $unused;
+		$this->prefetch_stats['missing_keys']         = max( 0, (int) $this->prefetch_stats['requested_keys'] - $loaded );
+		$this->prefetch_stats['calls_saved']          = $used;
+		$this->prefetch_stats['net_calls_saved']      = $net_calls_saved;
+		$this->prefetch_stats['estimated_time_saved'] = $average_load * $net_calls_saved;
+		$this->prefetch_stats['used_groups']          = $used_groups;
+		$this->prefetch_stats['unused_groups']        = $unused_groups;
+	}
+
+	/**
+	 * Counts sanitized cache keys in grouped prefetch data.
+	 *
+	 * @since 1.1.0
+	 *
+	 * @param array $groups Grouped prefetch keys.
+	 * @return int Total cache keys.
+	 */
+	protected function count_prefetch_group_keys( array $groups ): int {
+		$count = 0;
+
+		foreach ( $groups as $keys ) {
+			if ( is_array( $keys ) ) {
+				$count += count( $this->sanitize_prefetch_keys( $keys ) );
+			}
+		}
+
+		return $count;
+	}
+
+	/**
 	 * Adds multiple values to the cache in one call.
 	 *
 	 * @since 6.0.0
@@ -1804,6 +2322,7 @@ class WP_Object_Cache {
 		$group         = $this->sanitize_cache_group( $group );
 		$results       = array();
 		$success_count = 0;
+		$start         = microtime( true );
 
 		// Ensure directory exists once (optimization).
 		if ( ! $this->is_database_backend() && $this->should_persist( $group ) ) {
@@ -1843,6 +2362,7 @@ class WP_Object_Cache {
 
 		// Single group stat entry for the batch operation.
 		$this->group_ops[ $group ][] = sprintf( 'add_multiple (%d keys, %d successful)', count( $data ), $success_count );
+		$this->record_qm_operation( 'add', array_keys( $data ), $group, $data, $start, sprintf( '%d successful', $success_count ) );
 
 		return $results;
 	}
@@ -1868,6 +2388,7 @@ class WP_Object_Cache {
 		$group         = $this->sanitize_cache_group( $group );
 		$results       = array();
 		$success_count = 0;
+		$start         = microtime( true );
 
 		// Ensure directory exists once (optimization).
 		if ( ! $this->is_database_backend() ) {
@@ -1899,6 +2420,7 @@ class WP_Object_Cache {
 
 		// Single group stat entry for the batch operation.
 		$this->group_ops[ $group ][] = sprintf( 'set_multiple (%d keys, %d successful)', count( $data ), $success_count );
+		$this->record_qm_operation( $this->should_persist( $group ) ? 'set' : 'set_local', array_keys( $data ), $group, $data, $start, sprintf( '%d successful', $success_count ) );
 
 		return $results;
 	}
@@ -1926,6 +2448,7 @@ class WP_Object_Cache {
 		$missing_keys = array();
 		$cache_hits   = 0;
 		$cache_misses = 0;
+		$start        = microtime( true );
 
 		// First pass: check memory cache for all keys (fast batch operation).
 		foreach ( $keys as $key ) {
@@ -1940,6 +2463,7 @@ class WP_Object_Cache {
 			// Check memory first (unless forced).
 			if ( ! $force && $this->isset_internal( $cache_key, $group ) ) {
 				$results[ $key ] = $this->cache[ $group ][ $cache_key ];
+				$this->record_prefetch_used_key( $group, $cache_key );
 				++$cache_hits;
 			} else {
 				$missing_keys[ $key ] = $cache_key;
@@ -1985,6 +2509,7 @@ class WP_Object_Cache {
 
 		// Single group stat entry for the batch operation.
 		$this->group_ops[ $group ][] = sprintf( 'get_multiple (%d keys, %d hits, %d misses)', count( $keys ), $cache_hits, $cache_misses );
+		$this->record_qm_operation( 'get_multi', array_values( $keys ), $group, $results, $start, sprintf( '%d hits, %d misses', $cache_hits, $cache_misses ) );
 
 		return $results;
 	}
@@ -2009,6 +2534,7 @@ class WP_Object_Cache {
 		$results         = array();
 		$files_to_delete = array();
 		$success_count   = 0;
+		$start           = microtime( true );
 
 		// First pass: process all keys and collect files to delete.
 		foreach ( $keys as $key ) {
@@ -2055,6 +2581,7 @@ class WP_Object_Cache {
 
 		// Single group stat entry for the batch operation.
 		$this->group_ops[ $group ][] = sprintf( 'delete_multiple (%d keys, %d successful)', count( $keys ), $success_count );
+		$this->record_qm_operation( 'delete', $keys, $group, null, $start, sprintf( '%d successful', $success_count ) );
 
 		return $results;
 	}
@@ -2705,6 +3232,7 @@ class WP_Object_Cache {
 		if ( false === $prefetch_key ) {
 			return;
 		}
+		$this->record_prefetch_manifest_lookup( $prefetch_key );
 
 		$found    = null;
 		$manifest = $this->get( $prefetch_key, $this->prefetch_group, false, $found, false );
@@ -2712,17 +3240,32 @@ class WP_Object_Cache {
 			return;
 		}
 
-		foreach ( $manifest['groups'] as $group => $keys ) {
-			if ( ! is_string( $group ) || $group === $this->prefetch_group || ! is_array( $keys ) || empty( $keys ) ) {
-				continue;
-			}
+		$started = $this->begin_prefetch_manifest_load( $prefetch_key, $manifest );
 
-			$keys = $this->sanitize_prefetch_keys( $keys );
-			if ( empty( $keys ) ) {
-				continue;
-			}
+		try {
+			foreach ( $manifest['groups'] as $group => $keys ) {
+				if ( ! is_string( $group ) || $group === $this->prefetch_group || ! is_array( $keys ) || empty( $keys ) ) {
+					continue;
+				}
 
-			$this->get_multiple( $keys, $group );
+				$keys = $this->sanitize_prefetch_keys( $keys );
+				if ( empty( $keys ) ) {
+					continue;
+				}
+
+				$this->record_prefetch_requested_keys( $group, $keys );
+				$this->record_prefetch_load_operation();
+				$this->get_multiple( $keys, $group );
+
+				foreach ( $keys as $key ) {
+					$cache_key = $this->key( $key, $group );
+					if ( $this->isset_internal( $cache_key, $group ) ) {
+						$this->record_prefetch_loaded_key( $group, $cache_key );
+					}
+				}
+			}
+		} finally {
+			$this->finish_prefetch_manifest_load( $started );
 		}
 	}
 
@@ -2743,7 +3286,8 @@ class WP_Object_Cache {
 			return;
 		}
 
-		$groups = $this->build_prefetch_groups();
+		$started = microtime( true );
+		$groups  = $this->build_prefetch_groups();
 		if ( empty( $groups ) ) {
 			return;
 		}
@@ -2754,7 +3298,8 @@ class WP_Object_Cache {
 			'groups'  => $groups,
 		);
 
-		$this->set( $prefetch_key, $manifest, $this->prefetch_group, WP_FOCUS_PREFETCH_TTL );
+		$result = $this->set( $prefetch_key, $manifest, $this->prefetch_group, WP_FOCUS_PREFETCH_TTL );
+		$this->record_prefetch_manifest_save( $groups, $started, $result );
 	}
 
 	/**
@@ -3719,6 +4264,7 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 		if ( false === $prefetch_key ) {
 			return;
 		}
+		$this->record_prefetch_manifest_lookup( $prefetch_key );
 
 		$found    = null;
 		$manifest = $this->get( $prefetch_key, $this->prefetch_group, false, $found, false );
@@ -3726,7 +4272,13 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 			return;
 		}
 
-		$this->load_prefetch_groups_from_database( $manifest['groups'] );
+		$started = $this->begin_prefetch_manifest_load( $prefetch_key, $manifest );
+
+		try {
+			$this->load_prefetch_groups_from_database( $manifest['groups'] );
+		} finally {
+			$this->finish_prefetch_manifest_load( $started );
+		}
 	}
 
 	/**
@@ -3747,6 +4299,8 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 			if ( empty( $keys ) ) {
 				continue;
 			}
+
+			$this->record_prefetch_requested_keys( $group, $keys );
 
 			$bucket = $this->get_database_bucket( $group, false );
 			if ( false === $bucket ) {
@@ -3815,6 +4369,8 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 			return;
 		}
 
+		$this->record_prefetch_load_operation();
+
 		$values[] = time();
 		$where    = implode( ' OR ', $clauses );
 
@@ -3851,6 +4407,7 @@ class FOCUS_Database_Object_Cache extends WP_Object_Cache {
 				'mtime'         => (int) $row['expires_at'],
 				'calculated_at' => $now,
 			);
+			$this->record_prefetch_loaded_key( $request['group'], $request['cache_key'] );
 		}
 	}
 

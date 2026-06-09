@@ -1323,6 +1323,61 @@ class Tests_Focus_Cache extends WP_UnitTestCase {
 	}
 
 	/**
+	 * Test Query Monitor-compatible structured stats.
+	 */
+	public function test_query_monitor_get_stats_returns_vip_compatible_data() {
+		$group = 'qm_group';
+
+		$this->assertTrue( $this->cache->set( 'qm_key', array( 'value' => 'one' ), $group ) );
+		$this->assertSame( array( 'value' => 'one' ), $this->cache->get( 'qm_key', $group ) );
+		$this->assertFalse( $this->cache->get( 'missing_key', $group ) );
+
+		$multiple = $this->cache->get_multiple( array( 'qm_key', 'missing_key' ), $group );
+		$this->assertSame( array( 'value' => 'one' ), $multiple['qm_key'] );
+		$this->assertFalse( $multiple['missing_key'] );
+
+		$this->assertTrue( $this->cache->delete( 'qm_key', $group ) );
+
+		$this->cache->slow_op_microseconds = -1.0;
+		$this->assertTrue( $this->cache->set( 'slow_key', 'slow_value', 'qm_slow_group' ) );
+
+		$stats = $this->cache->get_stats();
+
+		$this->assertArrayHasKey( 'totals', $stats );
+		$this->assertArrayHasKey( 'operation_counts', $stats );
+		$this->assertArrayHasKey( 'operations', $stats );
+		$this->assertArrayHasKey( 'groups', $stats );
+		$this->assertArrayHasKey( 'slow-ops', $stats );
+		$this->assertArrayHasKey( 'slow-ops-groups', $stats );
+
+		$this->assertArrayHasKey( 'query_time', $stats['totals'] );
+		$this->assertArrayHasKey( 'size', $stats['totals'] );
+		$this->assertGreaterThanOrEqual( 0, $stats['totals']['query_time'] );
+		$this->assertGreaterThan( 0, $stats['totals']['size'] );
+
+		$this->assertGreaterThanOrEqual( 2, $stats['operation_counts']['set'] );
+		$this->assertGreaterThanOrEqual( 1, $stats['operation_counts']['get'] );
+		$this->assertGreaterThanOrEqual( 1, $stats['operation_counts']['get_local'] );
+		$this->assertSame( 1, $stats['operation_counts']['get_multi'] );
+		$this->assertSame( 1, $stats['operation_counts']['delete'] );
+		$this->assertGreaterThanOrEqual( 1, $stats['operation_counts']['slow-ops'] );
+
+		$this->assertContains( $group, $stats['groups'] );
+		$this->assertContains( 'qm_slow_group', $stats['slow-ops-groups'] );
+
+		$set_operation = $stats['operations']['set'][0];
+		$this->assertSame( $group, $set_operation['group'] );
+		$this->assertIsString( $set_operation['key'] );
+		$this->assertGreaterThan( 0, $set_operation['size'] );
+		$this->assertGreaterThanOrEqual( 0, $set_operation['time'] );
+		$this->assertSame( 'stored', $set_operation['result'] );
+
+		$get_multi_operation = $stats['operations']['get_multi'][0];
+		$this->assertSame( array( 'qm_key', 'missing_key' ), $get_multi_operation['key'] );
+		$this->assertStringContainsString( 'hits', $get_multi_operation['result'] );
+	}
+
+	/**
 	 * Test cached context helper state.
 	 */
 	public function test_context_detection_helpers_cache_constant_state() {
@@ -1811,9 +1866,9 @@ class Tests_Focus_Cache extends WP_UnitTestCase {
 	/**
 	 * Test cache prefetch manifest save and hydrate functionality.
 	 */
-	public function test_cache_prefetch_manifest_hydrates_runtime_cache() {
-		$this->enable_prefetch_for_testing();
-		$this->set_prefetch_request_context();
+		public function test_cache_prefetch_manifest_hydrates_runtime_cache() {
+			$this->enable_prefetch_for_testing();
+			$this->set_prefetch_request_context();
 
 		$group = 'test_prefetch';
 		$key1 = 'prefetch_key1';
@@ -1844,11 +1899,84 @@ class Tests_Focus_Cache extends WP_UnitTestCase {
 		$this->assertArrayHasKey( $normalized_key1, $fresh_cache->cache[ $group ], 'Prefetch should hydrate key one into runtime cache' );
 		$this->assertArrayHasKey( $normalized_key2, $fresh_cache->cache[ $group ], 'Prefetch should hydrate key two into runtime cache' );
 		$this->assertSame( 'prefetch_value1', $fresh_cache->cache[ $group ][ $normalized_key1 ] );
-		$this->assertSame( 'prefetch_value2', $fresh_cache->cache[ $group ][ $normalized_key2 ] );
-	}
+			$this->assertSame( 'prefetch_value2', $fresh_cache->cache[ $group ][ $normalized_key2 ] );
+		}
 
-	/**
-	 * Test hydrated prefetch keys are carried forward until the manifest expires.
+		/**
+		 * Test prefetch stats track saved, used, and unused prefetched keys.
+		 */
+		public function test_prefetch_stats_track_saved_used_and_unused_keys() {
+			$this->enable_prefetch_for_testing();
+			$this->set_prefetch_request_context( 'example.com', '/prefetch-stats' );
+
+			$group = 'test_prefetch_stats';
+			$key1 = 'prefetch_stats_key1';
+			$key2 = 'prefetch_stats_key2';
+			$missing_key = 'prefetch_stats_missing';
+
+			$this->cache->set( $key1, 'prefetch_stats_value1', $group );
+			$this->cache->set( $key2, 'prefetch_stats_value2', $group );
+
+			$prefetch_key = $this->cache->get_prefetch_key();
+			$this->cache->save_prefetch_manifest();
+
+			$saved_stats = $this->cache->get_prefetch_stats();
+			$this->assertSame( 1, $saved_stats['saved_manifest_groups'] );
+			$this->assertSame( 2, $saved_stats['saved_manifest_keys'] );
+			$this->assertTrue( $saved_stats['saved_manifest_succeeded'] );
+			$this->assertGreaterThanOrEqual( 0, $saved_stats['saved_manifest_time'] );
+
+			$manifest = $this->get_prefetch_manifest( $this->cache, $prefetch_key );
+			$manifest['groups'][ $group ][] = $this->cache->key( $missing_key, $group );
+			$this->cache->set( $prefetch_key, $manifest, $this->cache->prefetch_group );
+
+			$fresh_cache = $this->init_cache();
+			$fresh_cache->test_prefetch_enabled = true;
+			$fresh_cache->load_prefetch_manifest();
+
+			$loaded_stats = $fresh_cache->get_stats()['prefetch'];
+			$this->assertTrue( $loaded_stats['enabled'] );
+			$this->assertSame( 'file', $loaded_stats['backend'] );
+			$this->assertSame( $prefetch_key, $loaded_stats['key'] );
+			$this->assertTrue( $loaded_stats['manifest_found'] );
+			$this->assertSame( 1, $loaded_stats['manifest_groups'] );
+			$this->assertSame( 3, $loaded_stats['manifest_keys'] );
+			$this->assertSame( 3, $loaded_stats['requested_keys'] );
+			$this->assertSame( 2, $loaded_stats['loaded_keys'] );
+			$this->assertSame( 1, $loaded_stats['missing_keys'] );
+			$this->assertSame( 0, $loaded_stats['used_keys'] );
+			$this->assertSame( 2, $loaded_stats['unused_keys'] );
+			$this->assertSame( 1, $loaded_stats['load_operations'] );
+			$this->assertGreaterThanOrEqual( 0, $loaded_stats['load_time'] );
+			$this->assertArrayHasKey( $group, $loaded_stats['unused_groups'] );
+			$this->assertContains( $fresh_cache->key( $key1, $group ), $loaded_stats['unused_groups'][ $group ] );
+
+			$record_requested = new ReflectionMethod( $fresh_cache, 'record_prefetch_requested_keys' );
+			$record_requested->setAccessible( true );
+			$record_requested->invoke( $fresh_cache, $group, array( $fresh_cache->key( $key1, $group ) ) );
+			$this->assertSame( 3, $fresh_cache->get_prefetch_stats()['requested_keys'] );
+
+			$record_loaded = new ReflectionMethod( $fresh_cache, 'record_prefetch_loaded_key' );
+			$record_loaded->setAccessible( true );
+			$record_loaded->invoke( $fresh_cache, $group, $fresh_cache->key( $key1, $group ) );
+			$this->assertSame( 2, $fresh_cache->get_prefetch_stats()['loaded_keys'] );
+
+			$this->assertSame( 'prefetch_stats_value1', $fresh_cache->get( $key1, $group ) );
+			$this->assertSame( array( $key2 => 'prefetch_stats_value2' ), $fresh_cache->get_multiple( array( $key2 ), $group ) );
+
+			$used_stats = $fresh_cache->get_prefetch_stats();
+			$this->assertSame( 2, $used_stats['used_keys'] );
+			$this->assertSame( 0, $used_stats['unused_keys'] );
+			$this->assertSame( 2, $used_stats['calls_saved'] );
+			$this->assertSame( 1, $used_stats['net_calls_saved'] );
+			$this->assertGreaterThanOrEqual( 0, $used_stats['estimated_time_saved'] );
+			$this->assertArrayHasKey( $group, $used_stats['used_groups'] );
+			$this->assertContains( $fresh_cache->key( $key1, $group ), $used_stats['used_groups'][ $group ] );
+			$this->assertContains( $fresh_cache->key( $key2, $group ), $used_stats['used_groups'][ $group ] );
+		}
+
+		/**
+		 * Test hydrated prefetch keys are carried forward until the manifest expires.
 	 */
 	public function test_prefetch_manifest_carries_forward_hydrated_keys_until_ttl() {
 		$this->enable_prefetch_for_testing();
